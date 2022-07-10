@@ -1,0 +1,18 @@
+{
+  "name": "ollo",
+  "version": "1.0.2",
+  "description": "公众号H5🈲触顶后允许局部元素滚动解决方案",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "keywords": [
+    "scrollable",
+    "scroller",
+    "vue-scroll",
+    "weixin"
+  ],
+  "author": "Perfumere <1061393710@qq.com>",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  }
+}
