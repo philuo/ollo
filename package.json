@@ -1,6 +1,6 @@
 {
   "name": "ollo",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "公众号H5🈲触顶后允许局部元素滚动解决方案",
   "main": "index.js",
   "types": "index.d.ts",
