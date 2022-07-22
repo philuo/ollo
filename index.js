@@ -5,7 +5,9 @@
  */
 
 const { scroller } = require('./scroller');
+const { longtouch } = require('./longtouch');
 
 module.exports = {
-    scroller
+    scroller,
+    longtouch
 };

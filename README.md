@@ -15,6 +15,7 @@ import App from './App.vue';
 const app = createApp(App);
 
 app.use(scroller);
+app.use(longtouch);
 ```
 
 ```html
@@ -37,4 +38,25 @@ app.use(scroller);
 <template>
     <textarea v-scroll="shouldScroll" />
 </template>
+```
+
+
+```html
+<!-- case 1 -->
+<template>
+    <!-- 单指按下400ms, 触发 -->
+    <textarea v-longtouch="callback" />
+</template>
+
+<!-- case 2 -->
+<template>
+    <!-- 单指按下500ms, 触发 -->
+    <textarea v-longtouch:500="callback" />
+</template>
+
+<script setup>
+function callback() {
+    // doSomething
+}
+</script>
 ```
