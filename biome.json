@@ -1,10 +1,15 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.2.4/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.2.5/schema.json",
   "files": {
     "includes": ["**/*.ts", "**/*.tsx"]
   },
   "linter": {
-    "enabled": false
+    "enabled": false,
+    "rules": {
+      "suspicious": {
+        "noAssignInExpressions": "off"
+      }
+    }
   },
   "formatter": {
     "enabled": true,
@@ -21,7 +26,8 @@
       "arrowParentheses": "always",
       "bracketSpacing": true,
       "bracketSameLine": false,
-      "attributePosition": "auto"
+      "attributePosition": "auto",
+      "noAssignInExpressions": "off"
     }
   },
   "assist": {

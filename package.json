@@ -1,0 +1,29 @@
+{
+  "name": "ollo",
+  "version": "0.0.1-alpha.0",
+  "author": "Perfumere",
+  "description": "glede-engine",
+  "scripts": {
+    "dev": "vite --host --mode dev",
+    "build:ollo": "asc src/assembly/index.ts --config asconfig.json",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "solid-js": "^1.9.9"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.1",
+    "@webgpu/types": "^0.1.65",
+    "assemblyscript": "^0.28.8",
+    "lightningcss": "^1.30.1",
+    "sass": "^1.92.1",
+    "sass-embedded": "^1.92.1",
+    "typescript": "^5.9.2",
+    "unplugin-auto-import": "^20.1.0",
+    "vite": "^7.1.5",
+    "vite-plugin-solid": "^2.11.8"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

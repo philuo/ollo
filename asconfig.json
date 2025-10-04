@@ -1,51 +1,35 @@
 {
-  "entries": [
-    "src/ollo/assembly/index"
-  ],
+  "entries": ["src/assembly/index"],
   "targets": {
     "release": {
-      "outFile": "dist/rei.wasm",
-      "textFile": "dist/rei.wat",
+      "outFile": "dist/ollo.wasm",
+      "textFile": "dist/ollo.wat",
       "sourceMap": false,
       "optimizeLevel": 3,
       "shrinkLevel": 2,
       "noAssert": true,
-      "runtime": "stub",
-      "initialMemory": 8192,
-      "maximumMemory": 8192,
-      "sharedMemory": true,
-      "importMemory": true,
-      "memoryBase": 0
+      "runtime": "minimal"
     },
     "debug": {
-      "outFile": "src/ollo/dist/rei.debug.wasm",
-      "textFile": "src/ollo/dist/rei.debug.wat",
+      "outFile": "dist/ollo.debug.wasm",
+      "textFile": "dist/ollo.debug.wat",
       "sourceMap": true,
       "debug": true,
-      "runtime": "stub",
-      "initialMemory": 8192,
-      "maximumMemory": 8192,
-      "sharedMemory": true,
-      "importMemory": true
+      "runtime": "stub"
     }
   },
   "options": {
     "bindings": "esm",
     "exportRuntime": false,
     "transform": [],
-    "use": [
-      "Math=NativeMath"
-    ],
-    "enable": [
-      "simd",
-      "threads",
-      "bulk-memory",
-      "sign-extension"
-    ],
-    "disable": [
-      "mutable-globals"
-    ],
+    "use": ["Math=NativeMath"],
+    "enable": ["simd", "threads", "bulk-memory", "sign-extension"],
+    "disable": ["mutable-globals"],
     "exportTable": false,
-    "exportStart": false
+    "exportStart": false,
+    "sharedMemory": true,
+    "importMemory": false,
+    "initialMemory": 1024,
+    "maximumMemory": 8192
   }
 }
