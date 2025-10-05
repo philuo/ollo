@@ -180,6 +180,102 @@ button.active {
   padding: 12px;
 }
 
+/* 帧率控制 */
+.fps-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.fps-slider-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.fps-slider-container input[type='range'] {
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: #ddd;
+  outline: none;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.fps-slider-container input[type='range']::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #667eea;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 6px rgba(102, 126, 234, 0.3);
+}
+
+.fps-slider-container input[type='range']::-webkit-slider-thumb:hover {
+  background: #5568d3;
+  transform: scale(1.1);
+  box-shadow: 0 3px 8px rgba(102, 126, 234, 0.5);
+}
+
+.fps-slider-container input[type='range']::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #667eea;
+  cursor: pointer;
+  border: none;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 6px rgba(102, 126, 234, 0.3);
+}
+
+.fps-slider-container input[type='range']::-moz-range-thumb:hover {
+  background: #5568d3;
+  transform: scale(1.1);
+  box-shadow: 0 3px 8px rgba(102, 126, 234, 0.5);
+}
+
+.fps-slider-container input[type='range']:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.fps-slider-container input[type='range']:disabled::-webkit-slider-thumb {
+  cursor: not-allowed;
+}
+
+.fps-slider-container input[type='range']:disabled::-moz-range-thumb {
+  cursor: not-allowed;
+}
+
+.fps-value {
+  text-align: center;
+  font-size: 16px;
+  font-weight: 600;
+  color: #667eea;
+  background: #f8f9ff;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid #e0e4ff;
+}
+
+.fps-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.fps-presets button {
+  flex: 1;
+  min-width: calc(33.333% - 6px);
+  font-size: 13px;
+  padding: 8px;
+}
+
 /* 信息显示 */
 .info {
   background: #f8f9fa;

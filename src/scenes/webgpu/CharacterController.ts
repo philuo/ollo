@@ -224,6 +224,42 @@ export class CharacterController {
   }
 
   /**
+   * 获取当前动画的FPS
+   */
+  getCurrentFPS(): number {
+    return this.spriteAnimation.getCurrentFPS();
+  }
+
+  /**
+   * 设置当前动画的FPS
+   */
+  setCurrentFPS(fps: number) {
+    this.spriteAnimation.setCurrentFPS(fps);
+  }
+
+  /**
+   * 获取指定动画的FPS
+   */
+  getAnimationFPS(animationName: string): number {
+    if (!this.currentCharacter) {
+      return 20;
+    }
+    const fullAnimName = `${this.currentCharacter}_${animationName}`;
+    return this.spriteAnimation.getAnimationFPS(fullAnimName);
+  }
+
+  /**
+   * 设置指定动画的FPS
+   */
+  setAnimationFPS(animationName: string, fps: number) {
+    if (!this.currentCharacter) {
+      return;
+    }
+    const fullAnimName = `${this.currentCharacter}_${animationName}`;
+    this.spriteAnimation.setAnimationFPS(fullAnimName, fps);
+  }
+
+  /**
    * 清理资源
    */
   cleanup() {

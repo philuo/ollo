@@ -25,7 +25,6 @@ export class SpriteAnimation {
   private currentFrame: number = 0;
   private isPlaying: boolean = false;
   private lastFrameTime: number = 0;
-  private frameInterval: number = 50; // 默认50ms (20 FPS)
   private textures: Map<string, GPUTexture[]> = new Map();
   private loadedAnimations: Set<string> = new Set();
   private loopMode: LoopMode = 'loop'; // 默认循环播放
@@ -39,7 +38,6 @@ export class SpriteAnimation {
    */
   addAnimation(config: AnimationConfig) {
     this.animations.set(config.name, config);
-    this.frameInterval = 1000 / (config.fps || 20);
   }
 
   /**
@@ -125,8 +123,12 @@ export class SpriteAnimation {
       return false;
     }
 
+    // 计算当前动画的帧间隔（使用动画自己的fps设置）
+    const fps = config.fps || 20;
+    const frameInterval = 1000 / fps;
+
     // 检查是否需要切换到下一帧
-    if (currentTime - this.lastFrameTime >= this.frameInterval) {
+    if (currentTime - this.lastFrameTime >= frameInterval) {
       const nextFrame = this.currentFrame + 1;
       
       // 根据播放模式处理帧切换
@@ -225,6 +227,50 @@ export class SpriteAnimation {
    */
   getLoopMode(): LoopMode {
     return this.loopMode;
+  }
+
+  /**
+   * 获取当前动画的FPS
+   */
+  getCurrentFPS(): number {
+    if (!this.currentAnimation) {
+      return 20; // 默认值
+    }
+    const config = this.animations.get(this.currentAnimation);
+    return config?.fps || 20;
+  }
+
+  /**
+   * 设置当前动画的FPS
+   */
+  setCurrentFPS(fps: number) {
+    if (!this.currentAnimation) {
+      return;
+    }
+    const config = this.animations.get(this.currentAnimation);
+    if (config) {
+      config.fps = fps;
+      console.log(`动画 ${this.currentAnimation} 的帧率已设置为: ${fps} FPS`);
+    }
+  }
+
+  /**
+   * 获取指定动画的FPS
+   */
+  getAnimationFPS(animationName: string): number {
+    const config = this.animations.get(animationName);
+    return config?.fps || 20;
+  }
+
+  /**
+   * 设置指定动画的FPS
+   */
+  setAnimationFPS(animationName: string, fps: number) {
+    const config = this.animations.get(animationName);
+    if (config) {
+      config.fps = fps;
+      console.log(`动画 ${animationName} 的帧率已设置为: ${fps} FPS`);
+    }
   }
 }
 

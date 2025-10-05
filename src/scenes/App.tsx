@@ -17,6 +17,7 @@ export default function App() {
   const [isLoading, setIsLoading] = createSignal(false);
   const [errorMessage, setErrorMessage] = createSignal<string | null>(null);
   const [loopMode, setLoopMode] = createSignal<LoopMode>('loop');
+  const [currentFPS, setCurrentFPS] = createSignal(20);
 
   // 所有可用角色配置
   const characters = [
@@ -252,6 +253,14 @@ export default function App() {
     controller.setLoopMode(mode);
   };
 
+  // 改变帧率
+  const changeFPS = (fps: number) => {
+    if (!controller || !currentAnimation()) return;
+
+    controller.setCurrentFPS(fps);
+    setCurrentFPS(fps);
+  };
+
   // 更新状态信息
   let statusUpdateInterval: number | null = null;
   const startStatusUpdate = () => {
@@ -263,6 +272,7 @@ export default function App() {
       const status = controller.getAnimationStatus();
       setCurrentFrame(status.currentFrame);
       setTotalFrames(status.totalFrames);
+      setCurrentFPS(controller.getCurrentFPS());
 
       if (!status.isPlaying) {
         if (statusUpdateInterval !== null) {
@@ -359,6 +369,32 @@ export default function App() {
                 </div>
               </div>
 
+              {/* 帧率控制 */}
+              <div class="section">
+                <h2>帧率控制 (FPS)</h2>
+                <div class="fps-controls">
+                  <div class="fps-slider-container">
+                    <input
+                      type="range"
+                      min="1"
+                      max="60"
+                      step="1"
+                      value={currentFPS()}
+                      onInput={(e) => changeFPS(parseInt(e.currentTarget.value))}
+                      disabled={!currentAnimation()}
+                    />
+                    <div class="fps-value">{currentFPS()} FPS ({(1000 / currentFPS()).toFixed(1)}ms/帧)</div>
+                  </div>
+                  <div class="fps-presets">
+                    <button onClick={() => changeFPS(10)} disabled={!currentAnimation()}>10 FPS</button>
+                    <button onClick={() => changeFPS(15)} disabled={!currentAnimation()}>15 FPS</button>
+                    <button onClick={() => changeFPS(20)} disabled={!currentAnimation()}>20 FPS</button>
+                    <button onClick={() => changeFPS(30)} disabled={!currentAnimation()}>30 FPS</button>
+                    <button onClick={() => changeFPS(60)} disabled={!currentAnimation()}>60 FPS</button>
+                  </div>
+                </div>
+              </div>
+
               {/* 播放控制 */}
               <div class="section">
                 <h2>播放控制</h2>
@@ -386,7 +422,7 @@ export default function App() {
                     <p>
                       当前帧: {currentFrame() + 1} / {totalFrames()}
                     </p>
-                    <p>帧率: 20 FPS (50ms/帧)</p>
+                    <p>帧率: {currentFPS()} FPS ({(1000 / currentFPS()).toFixed(1)}ms/帧)</p>
                     <p>播放模式: {loopMode() === 'loop' ? '循环播放' : '单次播放'}</p>
                     <p>状态: {isPlaying() ? '播放中' : '已暂停'}</p>
                   </div>
