@@ -6,7 +6,7 @@
 export { Renderer } from './Renderer';
 export { TextureLoader } from './TextureLoader';
 export { SpriteAnimation } from './SpriteAnimation';
-export type { AnimationConfig } from './SpriteAnimation';
+export type { AnimationConfig, LoopMode } from './SpriteAnimation';
 export { SpriteRenderer } from './SpriteRenderer';
 export { CharacterController } from './CharacterController';
 export type { CharacterConfig } from './CharacterController';

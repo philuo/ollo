@@ -1,5 +1,6 @@
 import { onMount, createSignal, For, Show } from 'solid-js';
 import { CharacterController } from './webgpu/CharacterController';
+import type { LoopMode } from './webgpu/SpriteAnimation';
 import './App.css';
 
 export default function App() {
@@ -15,6 +16,7 @@ export default function App() {
   const [totalFrames, setTotalFrames] = createSignal(0);
   const [isLoading, setIsLoading] = createSignal(false);
   const [errorMessage, setErrorMessage] = createSignal<string | null>(null);
+  const [loopMode, setLoopMode] = createSignal<LoopMode>('loop');
 
   // 所有可用角色配置
   const characters = [
@@ -242,6 +244,14 @@ export default function App() {
     setTotalFrames(0);
   };
 
+  // 改变播放模式
+  const changeLoopMode = (mode: LoopMode) => {
+    if (!controller) return;
+
+    setLoopMode(mode);
+    controller.setLoopMode(mode);
+  };
+
   // 更新状态信息
   let statusUpdateInterval: number | null = null;
   const startStatusUpdate = () => {
@@ -324,6 +334,31 @@ export default function App() {
                 </div>
               </div>
 
+              {/* 播放模式 */}
+              <div class="section">
+                <h2>播放模式</h2>
+                <div class="loop-mode-controls">
+                  <label class="radio-label">
+                    <input
+                      type="radio"
+                      name="loopMode"
+                      checked={loopMode() === 'loop'}
+                      onChange={() => changeLoopMode('loop')}
+                    />
+                    <span>🔁 循环播放</span>
+                  </label>
+                  <label class="radio-label">
+                    <input
+                      type="radio"
+                      name="loopMode"
+                      checked={loopMode() === 'once'}
+                      onChange={() => changeLoopMode('once')}
+                    />
+                    <span>1️⃣ 仅播放一次</span>
+                  </label>
+                </div>
+              </div>
+
               {/* 播放控制 */}
               <div class="section">
                 <h2>播放控制</h2>
@@ -352,6 +387,7 @@ export default function App() {
                       当前帧: {currentFrame() + 1} / {totalFrames()}
                     </p>
                     <p>帧率: 20 FPS (50ms/帧)</p>
+                    <p>播放模式: {loopMode() === 'loop' ? '循环播放' : '单次播放'}</p>
                     <p>状态: {isPlaying() ? '播放中' : '已暂停'}</p>
                   </div>
                 </div>

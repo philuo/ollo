@@ -19,6 +19,7 @@
 - ✅ 支持 6 个角色切换 (Player, Bald Pirate, Cucumber, Big Guy, Captain, Whale)
 - ✅ 支持多动画播放 (Idle, Run, Jump, Attack 等 60+ 种动画)
 - ✅ 完整的播放控制 (播放、暂停、停止)
+- ✅ 双播放模式 (循环播放 / 单次播放)
 - ✅ 实时动画状态显示
 - ✅ 播放时可无缝切换角色和动画
 - ✅ 现代化的响应式用户界面

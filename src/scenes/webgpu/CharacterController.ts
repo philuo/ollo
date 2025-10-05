@@ -1,6 +1,6 @@
 import { Renderer } from './Renderer';
 import { TextureLoader } from './TextureLoader';
-import { SpriteAnimation, AnimationConfig } from './SpriteAnimation';
+import { SpriteAnimation, AnimationConfig, LoopMode } from './SpriteAnimation';
 import { SpriteRenderer } from './SpriteRenderer';
 
 /**
@@ -207,6 +207,20 @@ export class CharacterController {
    */
   getAllCharacters(): string[] {
     return Array.from(this.characters.keys());
+  }
+
+  /**
+   * 设置播放模式
+   */
+  setLoopMode(mode: LoopMode) {
+    this.spriteAnimation.setLoopMode(mode);
+  }
+
+  /**
+   * 获取当前播放模式
+   */
+  getLoopMode(): LoopMode {
+    return this.spriteAnimation.getLoopMode();
   }
 
   /**

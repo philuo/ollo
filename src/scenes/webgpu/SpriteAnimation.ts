@@ -10,6 +10,11 @@ export interface AnimationConfig {
 }
 
 /**
+ * 播放模式
+ */
+export type LoopMode = 'once' | 'loop';
+
+/**
  * 精灵动画类
  * 负责管理和播放序列帧动画
  */
@@ -23,6 +28,7 @@ export class SpriteAnimation {
   private frameInterval: number = 50; // 默认50ms (20 FPS)
   private textures: Map<string, GPUTexture[]> = new Map();
   private loadedAnimations: Set<string> = new Set();
+  private loopMode: LoopMode = 'loop'; // 默认循环播放
 
   constructor(textureLoader: TextureLoader) {
     this.textureLoader = textureLoader;
@@ -121,7 +127,22 @@ export class SpriteAnimation {
 
     // 检查是否需要切换到下一帧
     if (currentTime - this.lastFrameTime >= this.frameInterval) {
-      this.currentFrame = (this.currentFrame + 1) % config.frames.length;
+      const nextFrame = this.currentFrame + 1;
+      
+      // 根据播放模式处理帧切换
+      if (this.loopMode === 'once') {
+        // 单次播放：到达最后一帧后停止
+        if (nextFrame >= config.frames.length) {
+          this.isPlaying = false;
+          console.log('动画播放完成（单次）');
+          return true;
+        }
+        this.currentFrame = nextFrame;
+      } else {
+        // 循环播放：回到第一帧
+        this.currentFrame = nextFrame % config.frames.length;
+      }
+      
       this.lastFrameTime = currentTime;
       return true; // 表示需要重新渲染
     }
@@ -189,6 +210,21 @@ export class SpriteAnimation {
    */
   getAllAnimations(): string[] {
     return Array.from(this.animations.keys());
+  }
+
+  /**
+   * 设置播放模式
+   */
+  setLoopMode(mode: LoopMode) {
+    this.loopMode = mode;
+    console.log(`播放模式已设置为: ${mode === 'once' ? '单次播放' : '循环播放'}`);
+  }
+
+  /**
+   * 获取当前播放模式
+   */
+  getLoopMode(): LoopMode {
+    return this.loopMode;
   }
 }
 
