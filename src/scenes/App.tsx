@@ -71,6 +71,63 @@ export default function App() {
         { name: 'Dead_Ground', folderName: '11-Dead Ground', frameCount: 4 },
       ],
     },
+    {
+      name: 'BigGuy',
+      displayName: '敌人 - Big Guy',
+      basePath: '/src/sprites/4-Enemy-Big Guy',
+      animations: [
+        { name: 'Idle', folderName: '1-Idle', frameCount: 38 },
+        { name: 'Run', folderName: '2-Run', frameCount: 16 },
+        { name: 'Jump_Anticipation', folderName: '3-Jump Anticipation', frameCount: 1 },
+        { name: 'Jump', folderName: '4-Jump', frameCount: 4 },
+        { name: 'Fall', folderName: '5-Fall', frameCount: 2 },
+        { name: 'Ground', folderName: '6-Ground', frameCount: 3 },
+        { name: 'Attack', folderName: '7-Attack', frameCount: 11 },
+        { name: 'Pick_Bomb', folderName: '8-Pick (Bomb)', frameCount: 8 },
+        { name: 'Idle_Bomb', folderName: '9-Idle (Bomb)', frameCount: 1 },
+        { name: 'Run_Bomb', folderName: '10-Run (Bomb)', frameCount: 16 },
+        { name: 'Throw_Bomb', folderName: '11-Throw (Bomb)', frameCount: 11 },
+        { name: 'Hit', folderName: '12-Hit', frameCount: 8 },
+        { name: 'Dead_Hit', folderName: '13-Dead Hit', frameCount: 6 },
+        { name: 'Dead_Ground', folderName: '14-Dead Ground', frameCount: 4 },
+      ],
+    },
+    {
+      name: 'Captain',
+      displayName: '敌人 - Captain',
+      basePath: '/src/sprites/5-Enemy-Captain',
+      animations: [
+        { name: 'Idle', folderName: '1-Idle', frameCount: 32 },
+        { name: 'Run', folderName: '2-Run', frameCount: 14 },
+        { name: 'Jump_Anticipation', folderName: '3-Jump Anticipation', frameCount: 1 },
+        { name: 'Jump', folderName: '4-Jump', frameCount: 4 },
+        { name: 'Fall', folderName: '5-Fall', frameCount: 2 },
+        { name: 'Ground', folderName: '6-Ground', frameCount: 3 },
+        { name: 'Attack', folderName: '7-Attack', frameCount: 7 },
+        { name: 'Scare_Run', folderName: '8-Scare Run', frameCount: 12 },
+        { name: 'Hit', folderName: '9-Hit', frameCount: 8 },
+        { name: 'Dead_Hit', folderName: '10-Dead Hit', frameCount: 6 },
+        { name: 'Dead_Ground', folderName: '11-Dead Ground', frameCount: 4 },
+      ],
+    },
+    {
+      name: 'Whale',
+      displayName: '敌人 - Whale',
+      basePath: '/src/sprites/6-Enemy-Whale',
+      animations: [
+        { name: 'Idle', folderName: '1-Idle', frameCount: 44 },
+        { name: 'Run', folderName: '2-Run', frameCount: 14 },
+        { name: 'Jump_Anticipation', folderName: '3-Jump Anticipation', frameCount: 1 },
+        { name: 'Jump', folderName: '4-Jump', frameCount: 4 },
+        { name: 'Fall', folderName: '5-Fall', frameCount: 2 },
+        { name: 'Ground', folderName: '6-Ground', frameCount: 3 },
+        { name: 'Attack', folderName: '7-Attack', frameCount: 11 },
+        { name: 'Swallow_Bomb', folderName: '8-Swalow (Bomb)', frameCount: 10 },
+        { name: 'Hit', folderName: '9-Hit', frameCount: 7 },
+        { name: 'Dead_Hit', folderName: '10-Dead Hit', frameCount: 6 },
+        { name: 'Dead_Ground', folderName: '11-Dead Ground', frameCount: 4 },
+      ],
+    },
   ];
 
   onMount(async () => {
@@ -104,16 +161,31 @@ export default function App() {
   const loadCharacter = async (characterName: string) => {
     if (!controller) return;
 
+    // 如果点击的是当前角色，不重复加载
+    if (currentCharacter() === characterName) return;
+
     setIsLoading(true);
     setErrorMessage(null);
+
+    // 先停止当前动画
+    if (isPlaying()) {
+      controller.stopAnimation();
+    }
 
     try {
       const success = await controller.loadCharacter(characterName);
       if (success) {
         setCurrentCharacter(characterName);
-        setAvailableAnimations(controller.getCurrentCharacterAnimations());
-        setIsPlaying(false);
-        setCurrentAnimation(null);
+        const animations = controller.getCurrentCharacterAnimations();
+        setAvailableAnimations(animations);
+        
+        // 自动播放第一个动画（通常是 Idle）
+        if (animations.length > 0) {
+          playAnimation(animations[0]);
+        } else {
+          setIsPlaying(false);
+          setCurrentAnimation(null);
+        }
       } else {
         setErrorMessage('角色加载失败');
       }
@@ -128,6 +200,11 @@ export default function App() {
   // 播放动画
   const playAnimation = (animName: string) => {
     if (!controller) return;
+
+    // 如果正在播放其他动画，先停止
+    if (isPlaying() && currentAnimation() !== animName) {
+      controller.stopAnimation();
+    }
 
     controller.playAnimation(animName);
     setCurrentAnimation(animName);
@@ -236,7 +313,6 @@ export default function App() {
                     {anim => (
                       <button
                         onClick={() => playAnimation(anim)}
-                        disabled={isPlaying()}
                         classList={{
                           active: currentAnimation() === anim,
                         }}

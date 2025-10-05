@@ -16,11 +16,12 @@
 
 - ✅ 基于 WebGPU 的高性能渲染引擎
 - ✅ 精灵序列帧动画系统 (20 FPS / 50ms)
-- ✅ 支持多角色切换 (Player, Bald Pirate, Cucumber)
-- ✅ 支持多动画播放 (Idle, Run, Jump, Attack 等)
+- ✅ 支持 6 个角色切换 (Player, Bald Pirate, Cucumber, Big Guy, Captain, Whale)
+- ✅ 支持多动画播放 (Idle, Run, Jump, Attack 等 60+ 种动画)
 - ✅ 完整的播放控制 (播放、暂停、停止)
 - ✅ 实时动画状态显示
-- ✅ 现代化的用户界面
+- ✅ 播放时可无缝切换角色和动画
+- ✅ 现代化的响应式用户界面
 
 ## 快速开始
 

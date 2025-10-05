@@ -187,6 +187,96 @@ src/sprites/
     └── ...
 ```
 
+### 可用角色
+
+项目支持以下 6 个角色，共计 68 种动画：
+
+#### 1. Player (Bomb Guy) - 玩家角色
+**11 种动画**:
+- Idle (待机) - 26帧
+- Run (跑步) - 14帧
+- Jump Anticipation (跳跃准备) - 1帧
+- Jump (跳跃) - 4帧
+- Fall (下落) - 2帧
+- Ground (着陆) - 3帧
+- Hit (受击) - 8帧
+- Dead Hit (空中死亡) - 6帧
+- Dead Ground (着陆死亡) - 4帧
+- Door In (进门) - 16帧
+- Door Out (出门) - 16帧
+
+#### 2. Bald Pirate - 光头海盗敌人
+**10 种动画**:
+- Idle (待机) - 34帧
+- Run (跑步) - 14帧
+- Jump Anticipation (跳跃准备) - 1帧
+- Jump (跳跃) - 4帧
+- Fall (下落) - 2帧
+- Ground (着陆) - 3帧
+- Attack (攻击) - 12帧
+- Hit (受击) - 8帧
+- Dead Hit (空中死亡) - 6帧
+- Dead Ground (着陆死亡) - 4帧
+
+#### 3. Cucumber - 黄瓜敌人
+**11 种动画**:
+- Idle (待机) - 36帧
+- Run (跑步) - 12帧
+- Jump Anticipation (跳跃准备) - 1帧
+- Jump (跳跃) - 4帧
+- Fall (下落) - 2帧
+- Ground (着陆) - 3帧
+- Attack (攻击) - 11帧
+- Blow Wick (吹灭引线) - 11帧 ⭐ 特色动画
+- Hit (受击) - 8帧
+- Dead Hit (空中死亡) - 6帧
+- Dead Ground (着陆死亡) - 4帧
+
+#### 4. Big Guy - 大块头敌人
+**14 种动画** (最多动画的角色):
+- Idle (待机) - 38帧
+- Run (跑步) - 16帧
+- Jump Anticipation (跳跃准备) - 1帧
+- Jump (跳跃) - 4帧
+- Fall (下落) - 2帧
+- Ground (着陆) - 3帧
+- Attack (攻击) - 11帧
+- Pick Bomb (捡起炸弹) - 8帧 ⭐ 特色动画
+- Idle Bomb (持弹待机) - 1帧 ⭐ 特色动画
+- Run Bomb (持弹跑步) - 16帧 ⭐ 特色动画
+- Throw Bomb (投掷炸弹) - 11帧 ⭐ 特色动画
+- Hit (受击) - 8帧
+- Dead Hit (空中死亡) - 6帧
+- Dead Ground (着陆死亡) - 4帧
+
+#### 5. Captain - 船长敌人
+**11 种动画**:
+- Idle (待机) - 32帧
+- Run (跑步) - 14帧
+- Jump Anticipation (跳跃准备) - 1帧
+- Jump (跳跃) - 4帧
+- Fall (下落) - 2帧
+- Ground (着陆) - 3帧
+- Attack (攻击) - 7帧
+- Scare Run (恐惧逃跑) - 12帧 ⭐ 特色动画
+- Hit (受击) - 8帧
+- Dead Hit (空中死亡) - 6帧
+- Dead Ground (着陆死亡) - 4帧
+
+#### 6. Whale - 鲸鱼敌人
+**11 种动画**:
+- Idle (待机) - 44帧 (最长的待机动画)
+- Run (跑步) - 14帧
+- Jump Anticipation (跳跃准备) - 1帧
+- Jump (跳跃) - 4帧
+- Fall (下落) - 2帧
+- Ground (着陆) - 3帧
+- Attack (攻击) - 11帧
+- Swallow Bomb (吞噬炸弹) - 10帧 ⭐ 特色动画
+- Hit (受击) - 7帧
+- Dead Hit (空中死亡) - 6帧
+- Dead Ground (着陆死亡) - 4帧
+
 ### 动画配置
 
 每个角色包含多个动画，每个动画包含：
@@ -231,12 +321,17 @@ npm run dev
 #### 右侧 - 控制面板
 
 **1. 选择角色**
-- Player (Bomb Guy)
-- Enemy (Bald Pirate)
-- Enemy (Cucumber)
+- Player (Bomb Guy) - 玩家角色
+- Enemy (Bald Pirate) - 光头海盗
+- Enemy (Cucumber) - 黄瓜敌人
+- Enemy (Big Guy) - 大块头敌人
+- Enemy (Captain) - 船长敌人
+- Enemy (Whale) - 鲸鱼敌人
+- 💡 可以在播放时切换角色，新角色会自动播放第一个动画
 
 **2. 选择动画**
-- 点击任意动画按钮开始播放
+- 点击任意动画按钮播放该动画
+- 💡 可以在播放时切换动画，实现动画无缝切换
 - 当前选中的动画会高亮显示
 
 **3. 播放控制**
@@ -335,6 +430,12 @@ const status = controller.getAnimationStatus();
 - 使用 Solid.js 实现高性能 UI
 - 细粒度响应式更新
 - 流畅的用户体验
+
+### 5. 智能交互
+- 支持播放时无缝切换角色和动画
+- 自动停止旧动画并启动新动画
+- 避免重复加载已加载的角色
+- 切换角色时自动播放首个动画
 
 ## 常见问题
 
