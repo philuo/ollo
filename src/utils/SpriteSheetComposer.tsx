@@ -16,8 +16,25 @@ export default function SpriteSheetComposer() {
   const [gridCells, setGridCells] = createSignal<GridCell[]>([]);
   const [selectedCell, setSelectedCell] = createSignal<{ row: number; col: number } | null>(null);
   const [uploadedImages, setUploadedImages] = createSignal<string[]>([]);
+  const [selectedImage, setSelectedImage] = createSignal<string | null>(null);
   const [cols, setCols] = createSignal(0);
   const [rows, setRows] = createSignal(0);
+  
+  // 网格填充
+  const [gridPaddingTop, setGridPaddingTop] = createSignal(0);
+  const [gridPaddingRight, setGridPaddingRight] = createSignal(0);
+  const [gridPaddingBottom, setGridPaddingBottom] = createSignal(0);
+  const [gridPaddingLeft, setGridPaddingLeft] = createSignal(0);
+  
+  // 画布填充
+  const [canvasPaddingTop, setCanvasPaddingTop] = createSignal(0);
+  const [canvasPaddingRight, setCanvasPaddingRight] = createSignal(0);
+  const [canvasPaddingBottom, setCanvasPaddingBottom] = createSignal(0);
+  const [canvasPaddingLeft, setCanvasPaddingLeft] = createSignal(0);
+  
+  // 网格间隙
+  const [gridGapHorizontal, setGridGapHorizontal] = createSignal(0);
+  const [gridGapVertical, setGridGapVertical] = createSignal(0);
 
   let canvasRef: HTMLCanvasElement | undefined;
   let fileInputRef: HTMLInputElement | undefined;
@@ -28,14 +45,29 @@ export default function SpriteSheetComposer() {
     const height = canvasHeight();
     const gWidth = gridWidth();
     const gHeight = gridHeight();
+    const cPaddingLeft = canvasPaddingLeft();
+    const cPaddingRight = canvasPaddingRight();
+    const cPaddingTop = canvasPaddingTop();
+    const cPaddingBottom = canvasPaddingBottom();
+    const gapH = gridGapHorizontal();
+    const gapV = gridGapVertical();
 
     if (width <= 0 || height <= 0 || gWidth <= 0 || gHeight <= 0) {
       alert('请输入有效的尺寸');
       return;
     }
 
-    const numCols = Math.floor(width / gWidth);
-    const numRows = Math.floor(height / gHeight);
+    // 计算可用空间
+    const availableWidth = width - cPaddingLeft - cPaddingRight;
+    const availableHeight = height - cPaddingTop - cPaddingBottom;
+
+    // 计算网格数量（考虑gap）
+    // 公式: n个网格 + (n-1)个间隙 <= 可用空间
+    // n * gridWidth + (n-1) * gap <= availableWidth
+    // n * gridWidth + n * gap - gap <= availableWidth
+    // n * (gridWidth + gap) <= availableWidth + gap
+    const numCols = Math.floor((availableWidth + gapH) / (gWidth + gapH));
+    const numRows = Math.floor((availableHeight + gapV) / (gHeight + gapV));
 
     setCols(numCols);
     setRows(numRows);
@@ -84,6 +116,14 @@ export default function SpriteSheetComposer() {
   // 选中网格
   const selectCell = (row: number, col: number) => {
     setSelectedCell({ row, col });
+    
+    // 如果网格已填充，高亮对应的图片
+    const cell = gridCells().find(c => c.row === row && c.col === col);
+    if (cell?.imageUrl) {
+      setSelectedImage(cell.imageUrl);
+    } else {
+      setSelectedImage(null);
+    }
   };
 
   // 填充图片到选中的网格
@@ -99,6 +139,9 @@ export default function SpriteSheetComposer() {
           : cell
       )
     );
+
+    // 设置选中的图片
+    setSelectedImage(imageUrl);
 
     // 自动选中下一个网格
     selectNextCell(selected.row, selected.col);
@@ -123,6 +166,54 @@ export default function SpriteSheetComposer() {
     }
   };
 
+  // 更新网格尺寸或画布填充
+  const updateGridSize = () => {
+    const width = canvasWidth();
+    const height = canvasHeight();
+    const gWidth = gridWidth();
+    const gHeight = gridHeight();
+    const cPaddingLeft = canvasPaddingLeft();
+    const cPaddingRight = canvasPaddingRight();
+    const cPaddingTop = canvasPaddingTop();
+    const cPaddingBottom = canvasPaddingBottom();
+    const gapH = gridGapHorizontal();
+    const gapV = gridGapVertical();
+
+    if (width <= 0 || height <= 0 || gWidth <= 0 || gHeight <= 0) {
+      alert('请输入有效的尺寸');
+      return;
+    }
+
+    // 计算可用空间
+    const availableWidth = width - cPaddingLeft - cPaddingRight;
+    const availableHeight = height - cPaddingTop - cPaddingBottom;
+
+    // 计算网格数量（考虑gap）
+    const numCols = Math.floor((availableWidth + gapH) / (gWidth + gapH));
+    const numRows = Math.floor((availableHeight + gapV) / (gHeight + gapV));
+
+    setCols(numCols);
+    setRows(numRows);
+
+    // 保留现有的图片数据
+    const oldCells = gridCells();
+    const cells: GridCell[] = [];
+    
+    for (let row = 0; row < numRows; row++) {
+      for (let col = 0; col < numCols; col++) {
+        const existingCell = oldCells.find(c => c.row === row && c.col === col);
+        cells.push({
+          row,
+          col,
+          imageUrl: existingCell?.imageUrl || null,
+        });
+      }
+    }
+    
+    setGridCells(cells);
+    console.log(`网格已更新: ${numRows}行 x ${numCols}列`);
+  };
+
   // 导出雪碧图
   const exportSpriteSheet = () => {
     if (!canvasRef) return;
@@ -137,6 +228,14 @@ export default function SpriteSheetComposer() {
     const cells = gridCells();
     const gWidth = gridWidth();
     const gHeight = gridHeight();
+    const gPaddingTop = gridPaddingTop();
+    const gPaddingRight = gridPaddingRight();
+    const gPaddingBottom = gridPaddingBottom();
+    const gPaddingLeft = gridPaddingLeft();
+    const cPaddingTop = canvasPaddingTop();
+    const cPaddingLeft = canvasPaddingLeft();
+    const gapH = gridGapHorizontal();
+    const gapV = gridGapVertical();
 
     let loadedCount = 0;
     const totalImages = cells.filter(cell => cell.imageUrl).length;
@@ -150,13 +249,14 @@ export default function SpriteSheetComposer() {
       if (cell.imageUrl) {
         const img = new Image();
         img.onload = () => {
-          ctx.drawImage(
-            img,
-            cell.col * gWidth,
-            cell.row * gHeight,
-            gWidth,
-            gHeight
-          );
+          // 计算绘制位置和尺寸（考虑padding和gap）
+          // 位置 = 画布填充 + (网格大小 + gap) * 索引 + 网格内填充
+          const x = cPaddingLeft + cell.col * (gWidth + gapH) + gPaddingLeft;
+          const y = cPaddingTop + cell.row * (gHeight + gapV) + gPaddingTop;
+          const w = gWidth - gPaddingLeft - gPaddingRight;
+          const h = gHeight - gPaddingTop - gPaddingBottom;
+          
+          ctx.drawImage(img, x, y, w, h);
           loadedCount++;
 
           // 所有图片加载完成后导出
@@ -226,6 +326,53 @@ export default function SpriteSheetComposer() {
                   />
                 </label>
               </div>
+              
+              <details>
+                <summary>画布填充 (可选)</summary>
+                <div class="padding-grid">
+                  <div class="padding-center">
+                    <input
+                      type="number"
+                      value={canvasPaddingTop()}
+                      onInput={e => setCanvasPaddingTop(parseInt(e.currentTarget.value) || 0)}
+                      min="0"
+                      placeholder="上"
+                      title="上边距"
+                    />
+                  </div>
+                  <div class="padding-left">
+                    <input
+                      type="number"
+                      value={canvasPaddingLeft()}
+                      onInput={e => setCanvasPaddingLeft(parseInt(e.currentTarget.value) || 0)}
+                      min="0"
+                      placeholder="左"
+                      title="左边距"
+                    />
+                  </div>
+                  <div class="padding-middle"></div>
+                  <div class="padding-right">
+                    <input
+                      type="number"
+                      value={canvasPaddingRight()}
+                      onInput={e => setCanvasPaddingRight(parseInt(e.currentTarget.value) || 0)}
+                      min="0"
+                      placeholder="右"
+                      title="右边距"
+                    />
+                  </div>
+                  <div class="padding-bottom">
+                    <input
+                      type="number"
+                      value={canvasPaddingBottom()}
+                      onInput={e => setCanvasPaddingBottom(parseInt(e.currentTarget.value) || 0)}
+                      min="0"
+                      placeholder="下"
+                      title="下边距"
+                    />
+                  </div>
+                </div>
+              </details>
             </div>
 
             <div class="section">
@@ -250,6 +397,77 @@ export default function SpriteSheetComposer() {
                   />
                 </label>
               </div>
+              
+              <details>
+                <summary>网格填充 (可选)</summary>
+                <div class="padding-grid">
+                  <div class="padding-center">
+                    <input
+                      type="number"
+                      value={gridPaddingTop()}
+                      onInput={e => setGridPaddingTop(parseInt(e.currentTarget.value) || 0)}
+                      min="0"
+                      placeholder="上"
+                      title="上边距"
+                    />
+                  </div>
+                  <div class="padding-left">
+                    <input
+                      type="number"
+                      value={gridPaddingLeft()}
+                      onInput={e => setGridPaddingLeft(parseInt(e.currentTarget.value) || 0)}
+                      min="0"
+                      placeholder="左"
+                      title="左边距"
+                    />
+                  </div>
+                  <div class="padding-middle"></div>
+                  <div class="padding-right">
+                    <input
+                      type="number"
+                      value={gridPaddingRight()}
+                      onInput={e => setGridPaddingRight(parseInt(e.currentTarget.value) || 0)}
+                      min="0"
+                      placeholder="右"
+                      title="右边距"
+                    />
+                  </div>
+                  <div class="padding-bottom">
+                    <input
+                      type="number"
+                      value={gridPaddingBottom()}
+                      onInput={e => setGridPaddingBottom(parseInt(e.currentTarget.value) || 0)}
+                      min="0"
+                      placeholder="下"
+                      title="下边距"
+                    />
+                  </div>
+                </div>
+              </details>
+              
+              <details>
+                <summary>网格间隙 (可选)</summary>
+                <div class="input-group">
+                  <label>
+                    水平间隙 (px):
+                    <input
+                      type="number"
+                      value={gridGapHorizontal()}
+                      onInput={e => setGridGapHorizontal(parseInt(e.currentTarget.value) || 0)}
+                      min="0"
+                    />
+                  </label>
+                  <label>
+                    垂直间隙 (px):
+                    <input
+                      type="number"
+                      value={gridGapVertical()}
+                      onInput={e => setGridGapVertical(parseInt(e.currentTarget.value) || 0)}
+                      min="0"
+                    />
+                  </label>
+                </div>
+              </details>
             </div>
 
             <button class="btn-primary" onClick={createCanvas}>
@@ -261,12 +479,121 @@ export default function SpriteSheetComposer() {
             <div class="section">
               <h2>画布信息</h2>
               <div class="info-box">
-                <p>画布尺寸: {canvasWidth()} x {canvasHeight()}</p>
+                <p>目标画布尺寸: {canvasWidth()} x {canvasHeight()}</p>
+                <p>
+                  实际画布尺寸: {
+                    cols() * gridWidth() + 
+                    (cols() - 1) * gridGapHorizontal() + 
+                    canvasPaddingLeft() + canvasPaddingRight()
+                  } x {
+                    rows() * gridHeight() + 
+                    (rows() - 1) * gridGapVertical() + 
+                    canvasPaddingTop() + canvasPaddingBottom()
+                  }
+                </p>
                 <p>网格尺寸: {gridWidth()} x {gridHeight()}</p>
                 <p>网格数量: {rows()} 行 x {cols()} 列 = {rows() * cols()} 个</p>
               </div>
               <button class="btn-secondary" onClick={resetCanvas}>
                 重新配置
+              </button>
+            </div>
+
+            <div class="section">
+              <h2>画布填充</h2>
+              <div class="padding-grid">
+                <div class="padding-center">
+                  <input
+                    type="number"
+                    value={canvasPaddingTop()}
+                    onInput={e => setCanvasPaddingTop(parseInt(e.currentTarget.value) || 0)}
+                    min="0"
+                    placeholder="上"
+                    title="上边距"
+                  />
+                </div>
+                <div class="padding-left">
+                  <input
+                    type="number"
+                    value={canvasPaddingLeft()}
+                    onInput={e => setCanvasPaddingLeft(parseInt(e.currentTarget.value) || 0)}
+                    min="0"
+                    placeholder="左"
+                    title="左边距"
+                  />
+                </div>
+                <div class="padding-middle"></div>
+                <div class="padding-right">
+                  <input
+                    type="number"
+                    value={canvasPaddingRight()}
+                    onInput={e => setCanvasPaddingRight(parseInt(e.currentTarget.value) || 0)}
+                    min="0"
+                    placeholder="右"
+                    title="右边距"
+                  />
+                </div>
+                <div class="padding-bottom">
+                  <input
+                    type="number"
+                    value={canvasPaddingBottom()}
+                    onInput={e => setCanvasPaddingBottom(parseInt(e.currentTarget.value) || 0)}
+                    min="0"
+                    placeholder="下"
+                    title="下边距"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div class="section">
+              <h2>网格间隙</h2>
+              <div class="input-group">
+                <label>
+                  水平间隙 (px):
+                  <input
+                    type="number"
+                    value={gridGapHorizontal()}
+                    onInput={e => setGridGapHorizontal(parseInt(e.currentTarget.value) || 0)}
+                    min="0"
+                  />
+                </label>
+                <label>
+                  垂直间隙 (px):
+                  <input
+                    type="number"
+                    value={gridGapVertical()}
+                    onInput={e => setGridGapVertical(parseInt(e.currentTarget.value) || 0)}
+                    min="0"
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div class="section">
+              <h2>修改网格</h2>
+              <div class="input-group">
+                <label>
+                  网格宽度 (px):
+                  <input
+                    type="number"
+                    value={gridWidth()}
+                    onInput={e => setGridWidth(parseInt(e.currentTarget.value) || 0)}
+                    min="1"
+                  />
+                </label>
+                <label>
+                  网格高度 (px):
+                  <input
+                    type="number"
+                    value={gridHeight()}
+                    onInput={e => setGridHeight(parseInt(e.currentTarget.value) || 0)}
+                    min="1"
+                  />
+                </label>
+              </div>
+              <button class="btn-primary" onClick={updateGridSize}>
+                应用修改
               </button>
             </div>
 
@@ -287,7 +614,12 @@ export default function SpriteSheetComposer() {
               <div class="image-library">
                 <For each={uploadedImages()}>
                   {imageUrl => (
-                    <div class="image-item">
+                    <div
+                      class="image-item"
+                      classList={{
+                        highlighted: selectedImage() === imageUrl,
+                      }}
+                    >
                       <img
                         src={imageUrl}
                         alt="Uploaded"
@@ -322,10 +654,11 @@ export default function SpriteSheetComposer() {
               <div
                 class="grid-overlay"
                 style={{
-                  width: `${canvasWidth()}px`,
-                  height: `${canvasHeight()}px`,
+                  padding: `${canvasPaddingTop()}px ${canvasPaddingRight()}px ${canvasPaddingBottom()}px ${canvasPaddingLeft()}px`,
                   'grid-template-columns': `repeat(${cols()}, ${gridWidth()}px)`,
                   'grid-template-rows': `repeat(${rows()}, ${gridHeight()}px)`,
+                  'column-gap': `${gridGapHorizontal()}px`,
+                  'row-gap': `${gridGapVertical()}px`,
                 }}
               >
                 <For each={gridCells()}>
