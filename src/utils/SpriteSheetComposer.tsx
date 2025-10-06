@@ -35,9 +35,26 @@ export default function SpriteSheetComposer() {
   // 网格间隙
   const [gridGapHorizontal, setGridGapHorizontal] = createSignal(0);
   const [gridGapVertical, setGridGapVertical] = createSignal(0);
+  
+  // 导出配置
+  const [exportFormat, setExportFormat] = createSignal<'png' | 'webp-high' | 'webp-compressed'>('png');
+  const [exportScale, setExportScale] = createSignal(1);
+  const [imageSmoothingEnabled, setImageSmoothingEnabled] = createSignal(false);
+  
+  // 动画播放配置
+  const [selectionMode, setSelectionMode] = createSignal<'single' | 'row' | 'column' | 'multi'>('single');
+  const [selectedCells, setSelectedCells] = createSignal<Set<string>>(new Set());
+  const [animationFPS, setAnimationFPS] = createSignal(12);
+  const [isPlaying, setIsPlaying] = createSignal(false);
+  const [currentFrame, setCurrentFrame] = createSignal(0);
+  const [selectedRow, setSelectedRow] = createSignal<number | null>(null);
+  const [selectedColumn, setSelectedColumn] = createSignal<number | null>(null);
 
   let canvasRef: HTMLCanvasElement | undefined;
   let fileInputRef: HTMLInputElement | undefined;
+  let imageLibraryRef: HTMLDivElement | undefined;
+  let animationFrameId: number | undefined;
+  let lastFrameTime: number = 0;
 
   // 创建画布和网格
   const createCanvas = () => {
@@ -113,16 +130,69 @@ export default function SpriteSheetComposer() {
     console.log(`已上传 ${imageUrls.length} 张图片`);
   };
 
-  // 选中网格
-  const selectCell = (row: number, col: number) => {
-    setSelectedCell({ row, col });
+  // 滚动图片库到指定图片
+  const scrollToImage = (imageUrl: string) => {
+    if (!imageLibraryRef) return;
     
-    // 如果网格已填充，高亮对应的图片
-    const cell = gridCells().find(c => c.row === row && c.col === col);
-    if (cell?.imageUrl) {
-      setSelectedImage(cell.imageUrl);
-    } else {
-      setSelectedImage(null);
+    const images = uploadedImages();
+    const index = images.indexOf(imageUrl);
+    if (index === -1) return;
+    
+    // 找到对应的图片元素并滚动到可视区域
+    const imageElements = imageLibraryRef.querySelectorAll('.image-item');
+    const targetElement = imageElements[index] as HTMLElement;
+    if (targetElement) {
+      targetElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  };
+
+  // 选中网格
+  const selectCell = (row: number, col: number, isMultiSelect = false) => {
+    const mode = selectionMode();
+    
+    if (mode === 'single') {
+      setSelectedCell({ row, col });
+      setSelectedRow(null);
+      setSelectedColumn(null);
+      setSelectedCells(new Set<string>());
+      
+      // 如果网格已填充，高亮对应的图片并滚动到可视区域
+      const cell = gridCells().find(c => c.row === row && c.col === col);
+      if (cell?.imageUrl) {
+        setSelectedImage(cell.imageUrl);
+        scrollToImage(cell.imageUrl);
+      } else {
+        setSelectedImage(null);
+      }
+    } else if (mode === 'row') {
+      setSelectedRow(row);
+      setSelectedColumn(null);
+      setSelectedCell(null);
+      setSelectedCells(new Set<string>());
+    } else if (mode === 'column') {
+      setSelectedColumn(col);
+      setSelectedRow(null);
+      setSelectedCell(null);
+      setSelectedCells(new Set<string>());
+    } else if (mode === 'multi') {
+      const cellKey = `${row}-${col}`;
+      const newSelected = new Set(selectedCells());
+      
+      if (isMultiSelect) {
+        if (newSelected.has(cellKey)) {
+          newSelected.delete(cellKey);
+        } else {
+          newSelected.add(cellKey);
+        }
+      } else {
+        newSelected.clear();
+        newSelected.add(cellKey);
+      }
+      
+      setSelectedCells(newSelected);
+      setSelectedCell(null);
+      setSelectedRow(null);
+      setSelectedColumn(null);
     }
   };
 
@@ -218,14 +288,43 @@ export default function SpriteSheetComposer() {
   const exportSpriteSheet = () => {
     if (!canvasRef) return;
 
+    const cells = gridCells();
+    const totalImages = cells.filter(cell => cell.imageUrl).length;
+
+    if (totalImages === 0) {
+      alert('请先添加图片');
+      return;
+    }
+
+    // 获取导出配置
+    const scale = exportScale();
+    const format = exportFormat();
+    const smoothing = imageSmoothingEnabled();
+
+    // 创建缩放后的画布
+    const scaledWidth = canvasWidth() * scale;
+    const scaledHeight = canvasHeight() * scale;
+    
+    // 更新画布尺寸
+    canvasRef.width = scaledWidth;
+    canvasRef.height = scaledHeight;
+
     const ctx = canvasRef.getContext('2d');
     if (!ctx) return;
 
+    // 配置图像平滑
+    ctx.imageSmoothingEnabled = smoothing;
+    if (!smoothing) {
+      // 对于像素风格图片，禁用平滑可以保持清晰度
+      ctx.imageSmoothingQuality = 'low';
+    } else {
+      ctx.imageSmoothingQuality = 'high';
+    }
+
     // 清空画布
-    ctx.clearRect(0, 0, canvasWidth(), canvasHeight());
+    ctx.clearRect(0, 0, scaledWidth, scaledHeight);
 
     // 绘制所有图片
-    const cells = gridCells();
     const gWidth = gridWidth();
     const gHeight = gridHeight();
     const gPaddingTop = gridPaddingTop();
@@ -238,40 +337,63 @@ export default function SpriteSheetComposer() {
     const gapV = gridGapVertical();
 
     let loadedCount = 0;
-    const totalImages = cells.filter(cell => cell.imageUrl).length;
-
-    if (totalImages === 0) {
-      alert('请先添加图片');
-      return;
-    }
 
     cells.forEach(cell => {
       if (cell.imageUrl) {
         const img = new Image();
         img.onload = () => {
-          // 计算绘制位置和尺寸（考虑padding和gap）
-          // 位置 = 画布填充 + (网格大小 + gap) * 索引 + 网格内填充
-          const x = cPaddingLeft + cell.col * (gWidth + gapH) + gPaddingLeft;
-          const y = cPaddingTop + cell.row * (gHeight + gapV) + gPaddingTop;
-          const w = gWidth - gPaddingLeft - gPaddingRight;
-          const h = gHeight - gPaddingTop - gPaddingBottom;
+          // 计算绘制位置和尺寸（考虑padding、gap和缩放）
+          const x = (cPaddingLeft + cell.col * (gWidth + gapH) + gPaddingLeft) * scale;
+          const y = (cPaddingTop + cell.row * (gHeight + gapV) + gPaddingTop) * scale;
+          const w = (gWidth - gPaddingLeft - gPaddingRight) * scale;
+          const h = (gHeight - gPaddingTop - gPaddingBottom) * scale;
           
           ctx.drawImage(img, x, y, w, h);
           loadedCount++;
 
           // 所有图片加载完成后导出
           if (loadedCount === totalImages) {
-            canvasRef?.toBlob(blob => {
-              if (blob) {
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `spritesheet_${Date.now()}.png`;
-                a.click();
-                URL.revokeObjectURL(url);
-                console.log('雪碧图已导出');
-              }
-            });
+            let mimeType: string;
+            let quality: number | undefined;
+            let extension: string;
+
+            switch (format) {
+              case 'png':
+                mimeType = 'image/png';
+                quality = undefined; // PNG总是无损的
+                extension = 'png';
+                break;
+              case 'webp-high':
+                mimeType = 'image/webp';
+                quality = 1.0; // 最高质量（接近无损）
+                extension = 'webp';
+                break;
+              case 'webp-compressed':
+                mimeType = 'image/webp';
+                quality = 0.8; // 压缩质量（文件更小）
+                extension = 'webp';
+                break;
+            }
+
+            canvasRef?.toBlob(
+              blob => {
+                if (blob) {
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  const scaleStr = scale > 1 ? `_${scale}x` : '';
+                  a.download = `spritesheet${scaleStr}_${Date.now()}.${extension}`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                  
+                  const sizeKB = (blob.size / 1024).toFixed(2);
+                  console.log(`雪碧图已导出: ${extension.toUpperCase()}, ${scaledWidth}x${scaledHeight}, ${sizeKB}KB`);
+                  alert(`导出成功！\n格式: ${extension.toUpperCase()}\n尺寸: ${scaledWidth}x${scaledHeight}\n大小: ${sizeKB}KB`);
+                }
+              },
+              mimeType,
+              quality
+            );
           }
         };
         img.src = cell.imageUrl;
@@ -285,8 +407,12 @@ export default function SpriteSheetComposer() {
     URL.revokeObjectURL(imageUrl);
   };
 
-  // 清空网格
+  // 清空网格（仅在双击已填充的网格时）
   const clearCell = (row: number, col: number) => {
+    const cell = gridCells().find(c => c.row === row && c.col === col);
+    // 只有已填充的网格才能清空
+    if (!cell?.imageUrl) return;
+    
     setGridCells(cells =>
       cells.map(cell =>
         cell.row === row && cell.col === col
@@ -295,6 +421,92 @@ export default function SpriteSheetComposer() {
       )
     );
   };
+  
+  // 获取当前选中的帧序列
+  const getSelectedFrames = (): GridCell[] => {
+    const cells = gridCells();
+    const mode = selectionMode();
+    
+    if (mode === 'row') {
+      const row = selectedRow();
+      if (row === null) return [];
+      return cells
+        .filter(cell => cell.row === row && cell.imageUrl)
+        .sort((a, b) => a.col - b.col);
+    } else if (mode === 'column') {
+      const col = selectedColumn();
+      if (col === null) return [];
+      return cells
+        .filter(cell => cell.col === col && cell.imageUrl)
+        .sort((a, b) => a.row - b.row);
+    } else if (mode === 'multi') {
+      const selected = selectedCells();
+      return cells.filter(cell => 
+        selected.has(`${cell.row}-${cell.col}`) && cell.imageUrl
+      );
+    }
+    
+    return [];
+  };
+  
+  // 播放/暂停动画
+  const toggleAnimation = () => {
+    if (isPlaying()) {
+      stopAnimation();
+    } else {
+      startAnimation();
+    }
+  };
+  
+  // 开始播放动画（使用 requestAnimationFrame）
+  const startAnimation = () => {
+    const frames = getSelectedFrames();
+    if (frames.length === 0) {
+      alert('请先选择要播放的帧（行、列或多选网格）');
+      return;
+    }
+    
+    setIsPlaying(true);
+    setCurrentFrame(0);
+    lastFrameTime = performance.now();
+    
+    const animate = (currentTime: number) => {
+      if (!isPlaying()) return;
+      
+      const fps = animationFPS();
+      const frameDuration = 1000 / fps; // 每帧持续时间（毫秒）
+      const elapsed = currentTime - lastFrameTime;
+      
+      // 当经过的时间超过一帧的持续时间时，切换到下一帧
+      if (elapsed >= frameDuration) {
+        setCurrentFrame(prev => {
+          const frames = getSelectedFrames();
+          return (prev + 1) % frames.length;
+        });
+        lastFrameTime = currentTime - (elapsed % frameDuration); // 保持精确的帧率
+      }
+      
+      animationFrameId = requestAnimationFrame(animate);
+    };
+    
+    animationFrameId = requestAnimationFrame(animate);
+  };
+  
+  // 停止播放动画
+  const stopAnimation = () => {
+    setIsPlaying(false);
+    if (animationFrameId !== undefined) {
+      cancelAnimationFrame(animationFrameId);
+      animationFrameId = undefined;
+    }
+  };
+  
+  // 清理动画
+  onMount(() => {
+    return () => {
+      stopAnimation();
+    };
+  });
 
   return (
     <div class="sprite-composer-container">
@@ -611,7 +823,7 @@ export default function SpriteSheetComposer() {
                 + 上传图片
               </button>
 
-              <div class="image-library">
+              <div class="image-library" ref={imageLibraryRef}>
                 <For each={uploadedImages()}>
                   {imageUrl => (
                     <div
@@ -639,6 +851,136 @@ export default function SpriteSheetComposer() {
             </div>
 
             <div class="section">
+              <h2>🎬 动画预览</h2>
+              
+              <div class="input-group">
+                <label>
+                  选择模式:
+                  <select
+                    value={selectionMode()}
+                    onChange={e => {
+                      const newMode = e.currentTarget.value as any;
+                      setSelectionMode(newMode);
+                      stopAnimation();
+                      setSelectedRow(null);
+                      setSelectedColumn(null);
+                      setSelectedCells(new Set<string>());
+                    }}
+                  >
+                    <option value="single">单选模式（编辑）</option>
+                    <option value="row">行选模式（播放）</option>
+                    <option value="column">列选模式（播放）</option>
+                    <option value="multi">多选模式（播放）</option>
+                  </select>
+                </label>
+              </div>
+
+              <Show when={selectionMode() !== 'single'}>
+                <div class="input-group">
+                  <label>
+                    帧率 (FPS):
+                    <input
+                      type="number"
+                      value={animationFPS()}
+                      onInput={e => {
+                        const fps = parseInt(e.currentTarget.value) || 1;
+                        setAnimationFPS(Math.max(1, Math.min(60, fps)));
+                        if (isPlaying()) {
+                          stopAnimation();
+                          startAnimation();
+                        }
+                      }}
+                      min="1"
+                      max="60"
+                    />
+                  </label>
+                </div>
+
+                <div class="animation-controls">
+                  <button
+                    class={isPlaying() ? "btn-warning" : "btn-success"}
+                    onClick={toggleAnimation}
+                  >
+                    {isPlaying() ? '⏸ 暂停' : '▶️ 播放'}
+                  </button>
+                  <Show when={isPlaying()}>
+                    <div class="frame-info">
+                      帧: {currentFrame() + 1} / {getSelectedFrames().length}
+                    </div>
+                  </Show>
+                </div>
+
+                <Show when={getSelectedFrames().length > 0 && isPlaying()}>
+                  <div class="animation-preview">
+                    <img
+                      src={getSelectedFrames()[currentFrame()]?.imageUrl || ''}
+                      alt="Animation Preview"
+                    />
+                  </div>
+                </Show>
+
+                <div class="info-box" style="font-size: 12px; margin-top: 8px;">
+                  <p><strong>使用说明:</strong></p>
+                  <p>• 行选: 点击网格选择一整行进行播放</p>
+                  <p>• 列选: 点击网格选择一整列进行播放</p>
+                  <p>• 多选: 按住Ctrl/Cmd点击多个网格</p>
+                </div>
+              </Show>
+            </div>
+
+            <div class="section">
+              <h2>导出配置</h2>
+              
+              <div class="input-group">
+                <label>
+                  导出格式:
+                  <select
+                    value={exportFormat()}
+                    onChange={e => setExportFormat(e.currentTarget.value as any)}
+                  >
+                    <option value="png">PNG (无损)</option>
+                    <option value="webp-high">WebP (高质量)</option>
+                    <option value="webp-compressed">WebP (压缩)</option>
+                  </select>
+                </label>
+              </div>
+
+              <div class="input-group">
+                <label>
+                  缩放倍数:
+                  <select
+                    value={exportScale()}
+                    onChange={e => setExportScale(parseInt(e.currentTarget.value))}
+                  >
+                    <option value="1">1x (原始尺寸)</option>
+                    <option value="2">2x (放大2倍)</option>
+                    <option value="3">3x (放大3倍)</option>
+                    <option value="4">4x (放大4倍)</option>
+                  </select>
+                </label>
+              </div>
+
+              <div class="input-group">
+                <label style="display: flex; align-items: center; gap: 8px;">
+                  <input
+                    type="checkbox"
+                    checked={imageSmoothingEnabled()}
+                    onChange={e => setImageSmoothingEnabled(e.currentTarget.checked)}
+                  />
+                  启用图像平滑 (像素图建议关闭)
+                </label>
+              </div>
+
+              <div class="info-box" style="font-size: 12px; margin-top: 8px;">
+                <p><strong>格式说明:</strong></p>
+                <p>• PNG: 无损压缩，文件较大，保证最高质量</p>
+                <p>• WebP高质量: 接近无损，文件适中</p>
+                <p>• WebP压缩: 有损压缩，文件最小</p>
+                <p style="margin-top: 8px;"><strong>导出尺寸:</strong> {canvasWidth() * exportScale()}x{canvasHeight() * exportScale()}</p>
+              </div>
+            </div>
+
+            <div class="section">
               <h2>操作</h2>
               <button class="btn-success" onClick={exportSpriteSheet}>
                 📥 导出雪碧图
@@ -662,24 +1004,33 @@ export default function SpriteSheetComposer() {
                 }}
               >
                 <For each={gridCells()}>
-                  {cell => (
-                    <div
-                      class="grid-cell"
-                      classList={{
-                        selected:
-                          selectedCell()?.row === cell.row &&
-                          selectedCell()?.col === cell.col,
-                        filled: !!cell.imageUrl,
-                      }}
-                      onClick={() => selectCell(cell.row, cell.col)}
-                      onDblClick={() => clearCell(cell.row, cell.col)}
-                      title={`行${cell.row + 1}, 列${cell.col + 1}${cell.imageUrl ? ' (双击清空)' : ''}`}
-                    >
-                      {cell.imageUrl && (
-                        <img src={cell.imageUrl} alt={`Cell ${cell.row}-${cell.col}`} />
-                      )}
-                    </div>
-                  )}
+                  {cell => {
+                    const isSingleSelected = selectedCell()?.row === cell.row && selectedCell()?.col === cell.col;
+                    const isRowSelected = selectedRow() === cell.row;
+                    const isColumnSelected = selectedColumn() === cell.col;
+                    const isMultiSelected = selectedCells().has(`${cell.row}-${cell.col}`);
+                    const isSelected = isSingleSelected || isRowSelected || isColumnSelected || isMultiSelected;
+                    
+                    return (
+                      <div
+                        class="grid-cell"
+                        classList={{
+                          selected: isSelected,
+                          'row-selected': isRowSelected,
+                          'column-selected': isColumnSelected,
+                          'multi-selected': isMultiSelected,
+                          filled: !!cell.imageUrl,
+                        }}
+                        onClick={(e) => selectCell(cell.row, cell.col, e.ctrlKey || e.metaKey)}
+                        onDblClick={() => clearCell(cell.row, cell.col)}
+                        title={`行${cell.row + 1}, 列${cell.col + 1}${cell.imageUrl ? ' (双击清空)' : ''}`}
+                      >
+                        {cell.imageUrl && (
+                          <img src={cell.imageUrl} alt={`Cell ${cell.row}-${cell.col}`} />
+                        )}
+                      </div>
+                    );
+                  }}
                 </For>
               </div>
             </div>

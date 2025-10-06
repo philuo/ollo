@@ -76,6 +76,32 @@
   border-color: #667eea;
 }
 
+.input-group select {
+  padding: 10px;
+  border: 2px solid #ddd;
+  border-radius: 6px;
+  font-size: 14px;
+  background: white;
+  cursor: pointer;
+  transition: border-color 0.3s;
+}
+
+.input-group select:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+.input-group select:hover {
+  border-color: #999;
+}
+
+.input-group input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: #667eea;
+}
+
 /* 折叠面板 */
 details {
   margin-top: 12px;
@@ -205,6 +231,25 @@ details[open] summary {
   background: #059669;
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+}
+
+.btn-warning {
+  width: 100%;
+  padding: 12px 20px;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  background: #f59e0b;
+  color: white;
+}
+
+.btn-warning:hover {
+  background: #d97706;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
 }
 
 /* 信息框 */
@@ -349,6 +394,24 @@ details[open] summary {
   z-index: 10;
 }
 
+.grid-cell.row-selected {
+  background: #d1fae5;
+  border-color: #10b981;
+  box-shadow: inset 0 0 0 1px rgba(16, 185, 129, 0.3);
+}
+
+.grid-cell.column-selected {
+  background: #d1fae5;
+  border-color: #10b981;
+  box-shadow: inset 0 0 0 1px rgba(16, 185, 129, 0.3);
+}
+
+.grid-cell.multi-selected {
+  background: #d1fae5;
+  border-color: #10b981;
+  box-shadow: inset 0 0 0 1px rgba(16, 185, 129, 0.3);
+}
+
 .grid-cell.filled {
   background: white;
 }
@@ -401,6 +464,49 @@ details[open] summary {
 .image-library::-webkit-scrollbar-thumb:hover,
 .canvas-area::-webkit-scrollbar-thumb:hover {
   background: #5568d3;
+}
+
+/* 动画控制 */
+.animation-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.frame-info {
+  text-align: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: #667eea;
+  padding: 8px;
+  background: #f0f7ff;
+  border-radius: 6px;
+}
+
+/* 动画预览 */
+.animation-preview {
+  margin-top: 16px;
+  padding: 16px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 150px;
+  border: 2px dashed #667eea;
+}
+
+.animation-preview img {
+  max-width: 100%;
+  max-height: 200px;
+  object-fit: contain;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  border-radius: 4px;
+  background: white;
+  padding: 8px;
 }
 
 /* 响应式设计 */
