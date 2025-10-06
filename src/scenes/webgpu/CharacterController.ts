@@ -260,6 +260,38 @@ export class CharacterController {
   }
 
   /**
+   * 跳转到指定帧
+   */
+  goToFrame(frameIndex: number) {
+    this.spriteAnimation.goToFrame(frameIndex);
+    // 如果当前没有在播放，手动渲染一次
+    if (!this.spriteAnimation.getIsPlaying()) {
+      const texture = this.spriteAnimation.getCurrentTexture();
+      if (texture) {
+        this.spriteRenderer.render(texture);
+      }
+    }
+  }
+
+  /**
+   * 获取当前动画的所有帧路径
+   */
+  getCurrentFramePaths(): string[] {
+    return this.spriteAnimation.getCurrentFramePaths();
+  }
+
+  /**
+   * 获取指定动画的所有帧路径
+   */
+  getAnimationFramePaths(animationName: string): string[] {
+    if (!this.currentCharacter) {
+      return [];
+    }
+    const fullAnimName = `${this.currentCharacter}_${animationName}`;
+    return this.spriteAnimation.getAnimationFramePaths(fullAnimName);
+  }
+
+  /**
    * 清理资源
    */
   cleanup() {

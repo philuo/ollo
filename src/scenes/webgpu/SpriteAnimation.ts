@@ -272,5 +272,43 @@ export class SpriteAnimation {
       console.log(`动画 ${animationName} 的帧率已设置为: ${fps} FPS`);
     }
   }
+
+  /**
+   * 跳转到指定帧
+   */
+  goToFrame(frameIndex: number) {
+    if (!this.currentAnimation) {
+      return;
+    }
+    const config = this.animations.get(this.currentAnimation);
+    if (!config) {
+      return;
+    }
+    // 确保帧索引在有效范围内
+    if (frameIndex >= 0 && frameIndex < config.frames.length) {
+      this.currentFrame = frameIndex;
+      this.lastFrameTime = performance.now();
+      console.log(`跳转到第 ${frameIndex + 1} 帧`);
+    }
+  }
+
+  /**
+   * 获取当前动画的所有帧路径
+   */
+  getCurrentFramePaths(): string[] {
+    if (!this.currentAnimation) {
+      return [];
+    }
+    const config = this.animations.get(this.currentAnimation);
+    return config?.frames || [];
+  }
+
+  /**
+   * 获取指定动画的所有帧路径
+   */
+  getAnimationFramePaths(animationName: string): string[] {
+    const config = this.animations.get(animationName);
+    return config?.frames || [];
+  }
 }
 

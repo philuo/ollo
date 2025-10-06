@@ -1,4 +1,4 @@
-import { onMount, createSignal, For, Show } from 'solid-js';
+import { onMount, createSignal, For, Show, createEffect } from 'solid-js';
 import { CharacterController } from './webgpu/CharacterController';
 import type { LoopMode } from './webgpu/SpriteAnimation';
 import './App.css';
@@ -6,6 +6,7 @@ import './App.css';
 export default function App() {
   let canvasRef: HTMLCanvasElement | undefined;
   let controller: CharacterController | undefined;
+  let frameTimelineRef: HTMLDivElement | undefined;
 
   const [isInitialized, setIsInitialized] = createSignal(false);
   const [currentCharacter, setCurrentCharacter] = createSignal<string | null>(null);
@@ -18,6 +19,23 @@ export default function App() {
   const [errorMessage, setErrorMessage] = createSignal<string | null>(null);
   const [loopMode, setLoopMode] = createSignal<LoopMode>('loop');
   const [currentFPS, setCurrentFPS] = createSignal(20);
+  const [framePaths, setFramePaths] = createSignal<string[]>([]);
+
+  // 自动滚动到当前帧（实时跟随）
+  createEffect(() => {
+    const frame = currentFrame();
+    const timeline = frameTimelineRef;
+    if (timeline && framePaths().length > 0) {
+      // 计算当前帧的位置
+      const frameWidth = 64 + 8; // frame width + gap
+      const scrollPosition = frame * frameWidth - timeline.clientWidth / 2 + frameWidth / 2;
+      // 使用 scrollLeft 直接设置，无动画效果，实时跟随
+      timeline.scrollTo({
+        left: scrollPosition,
+        behavior: 'smooth',  // 平滑动画
+      });
+    }
+  });
 
   // 所有可用角色配置
   const characters = [
@@ -213,6 +231,10 @@ export default function App() {
     setCurrentAnimation(animName);
     setIsPlaying(true);
 
+    // 获取当前动画的帧路径
+    const paths = controller.getAnimationFramePaths(animName);
+    setFramePaths(paths);
+
     // 启动状态更新
     startStatusUpdate();
   };
@@ -243,6 +265,7 @@ export default function App() {
     setCurrentAnimation(null);
     setCurrentFrame(0);
     setTotalFrames(0);
+    setFramePaths([]);
   };
 
   // 改变播放模式
@@ -259,6 +282,13 @@ export default function App() {
 
     controller.setCurrentFPS(fps);
     setCurrentFPS(fps);
+  };
+
+  // 跳转到指定帧
+  const goToFrame = (frameIndex: number) => {
+    if (!controller) return;
+    controller.goToFrame(frameIndex);
+    setCurrentFrame(frameIndex);
   };
 
   // 更新状态信息
@@ -412,6 +442,36 @@ export default function App() {
                   </button>
                 </div>
               </div>
+
+              {/* 帧轨道 */}
+              <Show when={currentAnimation() && framePaths().length > 0}>
+                <div class="section">
+                  <h2>帧轨道 ({framePaths().length} 帧)</h2>
+                  <div class="frame-timeline" ref={frameTimelineRef}>
+                    <div class="frame-track">
+                      <For each={framePaths()}>
+                        {(framePath, index) => (
+                          <div
+                            class="frame-item"
+                            classList={{
+                              active: currentFrame() === index(),
+                            }}
+                            onClick={() => goToFrame(index())}
+                            title={`第 ${index() + 1} 帧`}
+                          >
+                            <img
+                              src={framePath}
+                              alt={`Frame ${index() + 1}`}
+                              loading="lazy"
+                            />
+                            <div class="frame-number">{index() + 1}</div>
+                          </div>
+                        )}
+                      </For>
+                    </div>
+                  </div>
+                </div>
+              </Show>
 
               {/* 状态信息 */}
               <Show when={currentAnimation()}>
