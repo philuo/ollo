@@ -46,7 +46,7 @@ export default function SpriteSheetComposer() {
   // 动画播放配置
   const [selectionMode, setSelectionMode] = createSignal<'single' | 'row' | 'column' | 'multi'>('single');
   const [selectedCells, setSelectedCells] = createSignal<Set<string>>(new Set());
-  const [animationFPS, setAnimationFPS] = createSignal(12);
+  const [animationFPS, setAnimationFPS] = createSignal(20);
   const [isPlaying, setIsPlaying] = createSignal(false);
   const [currentFrame, setCurrentFrame] = createSignal(0);
   const [selectedRow, setSelectedRow] = createSignal<number | null>(null);
@@ -55,8 +55,12 @@ export default function SpriteSheetComposer() {
   let canvasRef: HTMLCanvasElement | undefined;
   let fileInputRef: HTMLInputElement | undefined;
   let imageLibraryRef: HTMLDivElement | undefined;
+  let animationPreviewCanvas: HTMLCanvasElement | undefined;
   let animationFrameId: number | undefined;
   let lastFrameTime: number = 0;
+  
+  // 图片缓存：使用 ImageBitmap 而不是 blob URL
+  const imageBitmapCache = new Map<string, ImageBitmap>();
 
   // 创建画布和网格
   const createCanvas = () => {
@@ -113,23 +117,33 @@ export default function SpriteSheetComposer() {
     setUploadedImages([]);
   };
 
-  // 上传图片
-  const handleImageUpload = (e: Event) => {
+  // 上传图片并预加载为 ImageBitmap
+  const handleImageUpload = async (e: Event) => {
     const input = e.target as HTMLInputElement;
     if (!input.files) return;
 
     const files = Array.from(input.files);
     const imageUrls: string[] = [];
 
-    files.forEach(file => {
+    // 异步加载所有图片并创建 ImageBitmap
+    const loadPromises = files.map(async (file) => {
       if (file.type.startsWith('image/')) {
         const url = URL.createObjectURL(file);
         imageUrls.push(url);
+        
+        // 预加载为 ImageBitmap（高性能）
+        try {
+          const bitmap = await createImageBitmap(file);
+          imageBitmapCache.set(url, bitmap);
+        } catch (error) {
+          console.error('创建 ImageBitmap 失败:', error);
+        }
       }
     });
 
+    await Promise.all(loadPromises);
     setUploadedImages(prev => [...prev, ...imageUrls]);
-    console.log(`已上传 ${imageUrls.length} 张图片`);
+    console.log(`已上传 ${imageUrls.length} 张图片（已预加载为 ImageBitmap）`);
   };
 
   // 滚动图片库到指定图片
@@ -311,7 +325,7 @@ export default function SpriteSheetComposer() {
         break;
       case 'webp-compressed':
         mimeType = 'image/webp';
-        quality = 0.8;
+        quality = 0.82; // 压缩模式（更小的文件）
         extension = 'webp';
         break;
       default:
@@ -476,7 +490,50 @@ export default function SpriteSheetComposer() {
   // 移除图片
   const removeImage = (imageUrl: string) => {
     setUploadedImages(imgs => imgs.filter(img => img !== imageUrl));
+    
+    // 清理 ImageBitmap 缓存
+    const bitmap = imageBitmapCache.get(imageUrl);
+    if (bitmap) {
+      bitmap.close(); // 释放 GPU 内存
+      imageBitmapCache.delete(imageUrl);
+    }
+    
     URL.revokeObjectURL(imageUrl);
+  };
+  
+  // 使用 Canvas 绘制动画帧
+  const drawAnimationFrame = (frameIndex: number) => {
+    if (!animationPreviewCanvas) return;
+    
+    const frames = getSelectedFrames();
+    if (frameIndex >= frames.length) return;
+    
+    const frame = frames[frameIndex];
+    if (!frame?.imageUrl) return;
+    
+    const bitmap = imageBitmapCache.get(frame.imageUrl);
+    if (!bitmap) return;
+    
+    const ctx = animationPreviewCanvas.getContext('2d');
+    if (!ctx) return;
+    
+    // 清空画布
+    ctx.clearRect(0, 0, animationPreviewCanvas.width, animationPreviewCanvas.height);
+    
+    // 设置画布大小适配图片
+    const maxSize = 200;
+    const scale = Math.min(maxSize / bitmap.width, maxSize / bitmap.height);
+    const displayWidth = bitmap.width * scale;
+    const displayHeight = bitmap.height * scale;
+    
+    animationPreviewCanvas.width = displayWidth;
+    animationPreviewCanvas.height = displayHeight;
+    
+    // 禁用图像平滑以保持像素风格
+    ctx.imageSmoothingEnabled = false;
+    
+    // 绘制 ImageBitmap（高性能）
+    ctx.drawImage(bitmap, 0, 0, displayWidth, displayHeight);
   };
 
   // 清空网格（仅在双击已填充的网格时）
@@ -542,6 +599,9 @@ export default function SpriteSheetComposer() {
     setCurrentFrame(0);
     lastFrameTime = performance.now();
     
+    // 立即绘制第一帧
+    drawAnimationFrame(0);
+    
     const animate = (currentTime: number) => {
       if (!isPlaying()) return;
       
@@ -551,10 +611,12 @@ export default function SpriteSheetComposer() {
       
       // 当经过的时间超过一帧的持续时间时，切换到下一帧
       if (elapsed >= frameDuration) {
-        setCurrentFrame(prev => {
-          const frames = getSelectedFrames();
-          return (prev + 1) % frames.length;
-        });
+        const newFrameIndex = (currentFrame() + 1) % getSelectedFrames().length;
+        setCurrentFrame(newFrameIndex);
+        
+        // 使用 Canvas 绘制帧（高性能）
+        drawAnimationFrame(newFrameIndex);
+        
         lastFrameTime = currentTime - (elapsed % frameDuration); // 保持精确的帧率
       }
       
@@ -573,10 +635,14 @@ export default function SpriteSheetComposer() {
     }
   };
   
-  // 清理动画
+  // 清理资源
   onMount(() => {
     return () => {
       stopAnimation();
+      
+      // 清理所有 ImageBitmap 缓存
+      imageBitmapCache.forEach(bitmap => bitmap.close());
+      imageBitmapCache.clear();
     };
   });
 
@@ -984,9 +1050,9 @@ export default function SpriteSheetComposer() {
 
                 <Show when={getSelectedFrames().length > 0 && isPlaying()}>
                   <div class="animation-preview">
-                    <img
-                      src={getSelectedFrames()[currentFrame()]?.imageUrl || ''}
-                      alt="Animation Preview"
+                    <canvas
+                      ref={animationPreviewCanvas}
+                      style="image-rendering: pixelated; image-rendering: crisp-edges;"
                     />
                   </div>
                 </Show>

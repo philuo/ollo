@@ -545,7 +545,7 @@ details[open] summary {
   border: 2px dashed #667eea;
 }
 
-.animation-preview img {
+.animation-preview canvas {
   max-width: 100%;
   max-height: 200px;
   object-fit: contain;
@@ -555,6 +555,8 @@ details[open] summary {
   border-radius: 4px;
   background: white;
   padding: 8px;
+  display: block;
+  margin: 0 auto;
 }
 
 /* 响应式设计 */
