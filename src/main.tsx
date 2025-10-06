@@ -1,8 +1,8 @@
 import { render } from 'solid-js/web';
-import App from '@/scenes/App';
+import AppRouter from '@/AppRouter';
 
 async function bootstrap() {
-  render(() => <App />, document.getElementById('app')!);
+  render(() => <AppRouter />, document.getElementById('app')!);
 }
 
 bootstrap();
