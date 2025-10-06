@@ -51,6 +51,11 @@ export default function SpriteSheetComposer() {
   const [currentFrame, setCurrentFrame] = createSignal(0);
   const [selectedRow, setSelectedRow] = createSignal<number | null>(null);
   const [selectedColumn, setSelectedColumn] = createSignal<number | null>(null);
+  
+  // 动画背景配置
+  const [canvasBackground, setCanvasBackground] = createSignal<'transparent' | 'white' | 'black' | 'custom'>('transparent');
+  const [customBackgroundColor, setCustomBackgroundColor] = createSignal('#888888');
+  const [recentColors, setRecentColors] = createSignal<string[]>(['#888888', '#666666', '#444444']);
 
   let canvasRef: HTMLCanvasElement | undefined;
   let fileInputRef: HTMLInputElement | undefined;
@@ -501,6 +506,30 @@ export default function SpriteSheetComposer() {
     URL.revokeObjectURL(imageUrl);
   };
   
+  // 添加颜色到最近使用列表
+  const addToRecentColors = (color: string) => {
+    setRecentColors(prev => {
+      const filtered = prev.filter(c => c !== color);
+      return [color, ...filtered].slice(0, 5); // 保留最近5个
+    });
+  };
+  
+  // 绘制透明方格背景
+  const drawCheckerboard = (ctx: CanvasRenderingContext2D, width: number, height: number) => {
+    const squareSize = 8;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, width, height);
+    
+    ctx.fillStyle = '#cccccc';
+    for (let y = 0; y < height; y += squareSize) {
+      for (let x = 0; x < width; x += squareSize) {
+        if ((x / squareSize + y / squareSize) % 2 === 0) {
+          ctx.fillRect(x, y, squareSize, squareSize);
+        }
+      }
+    }
+  };
+  
   // 使用 Canvas 绘制动画帧
   const drawAnimationFrame = (frameIndex: number) => {
     if (!animationPreviewCanvas) return;
@@ -517,9 +546,6 @@ export default function SpriteSheetComposer() {
     const ctx = animationPreviewCanvas.getContext('2d');
     if (!ctx) return;
     
-    // 清空画布
-    ctx.clearRect(0, 0, animationPreviewCanvas.width, animationPreviewCanvas.height);
-    
     // 设置画布大小适配图片
     const maxSize = 200;
     const scale = Math.min(maxSize / bitmap.width, maxSize / bitmap.height);
@@ -528,6 +554,26 @@ export default function SpriteSheetComposer() {
     
     animationPreviewCanvas.width = displayWidth;
     animationPreviewCanvas.height = displayHeight;
+    
+    // 绘制背景
+    const bgType = canvasBackground();
+    switch (bgType) {
+      case 'transparent':
+        drawCheckerboard(ctx, displayWidth, displayHeight);
+        break;
+      case 'white':
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, displayWidth, displayHeight);
+        break;
+      case 'black':
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(0, 0, displayWidth, displayHeight);
+        break;
+      case 'custom':
+        ctx.fillStyle = customBackgroundColor();
+        ctx.fillRect(0, 0, displayWidth, displayHeight);
+        break;
+    }
     
     // 禁用图像平滑以保持像素风格
     ctx.imageSmoothingEnabled = false;
@@ -542,13 +588,16 @@ export default function SpriteSheetComposer() {
     // 只有已填充的网格才能清空
     if (!cell?.imageUrl) return;
     
-    setGridCells(cells =>
-      cells.map(cell =>
-        cell.row === row && cell.col === col
-          ? { ...cell, imageUrl: null }
-          : cell
+    // 创建新数组确保触发响应式更新
+    setGridCells(cells => 
+      cells.map(c => 
+        c.row === row && c.col === col
+          ? { row: c.row, col: c.col, imageUrl: null } // 创建新对象
+          : c
       )
     );
+    
+    console.log(`已清空网格 [${row}, ${col}]`);
   };
   
   // 获取当前选中的帧序列
@@ -1034,6 +1083,91 @@ export default function SpriteSheetComposer() {
                   </label>
                 </div>
 
+                <div class="input-group">
+                  <label>画布背景:</label>
+                  <div class="background-selector">
+                    <button
+                      class="bg-option"
+                      classList={{ active: canvasBackground() === 'transparent' }}
+                      onClick={() => setCanvasBackground('transparent')}
+                      title="透明方格"
+                    >
+                      <div class="bg-preview checkerboard"></div>
+                    </button>
+                    <button
+                      class="bg-option"
+                      classList={{ active: canvasBackground() === 'white' }}
+                      onClick={() => setCanvasBackground('white')}
+                      title="纯白色"
+                    >
+                      <div class="bg-preview" style="background: white;"></div>
+                    </button>
+                    <button
+                      class="bg-option"
+                      classList={{ active: canvasBackground() === 'black' }}
+                      onClick={() => setCanvasBackground('black')}
+                      title="纯黑色"
+                    >
+                      <div class="bg-preview" style="background: black;"></div>
+                    </button>
+                    <button
+                      class="bg-option"
+                      classList={{ active: canvasBackground() === 'custom' }}
+                      onClick={() => setCanvasBackground('custom')}
+                      title="自定义颜色"
+                    >
+                      <div class="bg-preview" style={`background: ${customBackgroundColor()};`}></div>
+                    </button>
+                  </div>
+                </div>
+
+                <Show when={canvasBackground() === 'custom'}>
+                  <div class="input-group">
+                    <label>
+                      自定义颜色:
+                      <div class="color-picker-wrapper">
+                        <input
+                          type="color"
+                          value={customBackgroundColor()}
+                          onInput={e => {
+                            const color = e.currentTarget.value;
+                            setCustomBackgroundColor(color);
+                            addToRecentColors(color);
+                          }}
+                        />
+                        <input
+                          type="text"
+                          value={customBackgroundColor()}
+                          onInput={e => {
+                            const color = e.currentTarget.value;
+                            if (/^#[0-9A-Fa-f]{6}$/.test(color)) {
+                              setCustomBackgroundColor(color);
+                              addToRecentColors(color);
+                            }
+                          }}
+                          placeholder="#888888"
+                          class="color-input"
+                        />
+                      </div>
+                    </label>
+                    <Show when={recentColors().length > 0}>
+                      <div class="recent-colors">
+                        <span>最近使用:</span>
+                        <For each={recentColors()}>
+                          {color => (
+                            <button
+                              class="recent-color-btn"
+                              style={`background: ${color};`}
+                              onClick={() => setCustomBackgroundColor(color)}
+                              title={color}
+                            />
+                          )}
+                        </For>
+                      </div>
+                    </Show>
+                  </div>
+                </Show>
+
                 <div class="animation-controls">
                   <button
                     class={isPlaying() ? "btn-warning" : "btn-success"}
@@ -1058,11 +1192,33 @@ export default function SpriteSheetComposer() {
                 </Show>
 
                 <div class="info-box" style="font-size: 12px; margin-top: 8px;">
-                  <p><strong>使用说明:</strong></p>
-                  <p>• 行选: 点击网格选择一整行进行播放</p>
-                  <p>• 列选: 点击网格选择一整列进行播放</p>
-                  <p>• 多选: 按住Ctrl/Cmd点击多个网格</p>
+                  <p><strong>📖 使用说明:</strong></p>
+                  <p>• <strong>行选模式</strong>: 点击任意网格 → 整行绿色高亮 🟢</p>
+                  <p>• <strong>列选模式</strong>: 点击任意网格 → 整列绿色高亮 🟢</p>
+                  <p>• <strong>多选模式</strong>:</p>
+                  <p style="margin-left: 16px;">- Mac: ⌘ Command + 点击选中/取消</p>
+                  <p style="margin-left: 16px;">- Win: Ctrl + 点击选中/取消</p>
+                  <p style="margin-left: 16px;">- 已选网格显示绿色边框 🟢</p>
+                  <p>• <strong>背景</strong>: 选择合适的背景查看透明区域</p>
                 </div>
+
+                <Show when={selectionMode() === 'row' && selectedRow() !== null}>
+                  <div class="selection-info">
+                    ✅ 已选中: 第 {selectedRow()! + 1} 行
+                  </div>
+                </Show>
+                
+                <Show when={selectionMode() === 'column' && selectedColumn() !== null}>
+                  <div class="selection-info">
+                    ✅ 已选中: 第 {selectedColumn()! + 1} 列
+                  </div>
+                </Show>
+                
+                <Show when={selectionMode() === 'multi' && selectedCells().size > 0}>
+                  <div class="selection-info">
+                    ✅ 已选中: {selectedCells().size} 个网格
+                  </div>
+                </Show>
               </Show>
             </div>
 
@@ -1180,30 +1336,32 @@ export default function SpriteSheetComposer() {
                 }}
               >
                 <For each={gridCells()}>
-                  {cell => {
-                    const isSingleSelected = selectedCell()?.row === cell.row && selectedCell()?.col === cell.col;
-                    const isRowSelected = selectedRow() === cell.row;
-                    const isColumnSelected = selectedColumn() === cell.col;
-                    const isMultiSelected = selectedCells().has(`${cell.row}-${cell.col}`);
-                    const isSelected = isSingleSelected || isRowSelected || isColumnSelected || isMultiSelected;
+                  {(cell, index) => {
+                    // 使用 memo 创建响应式计算，确保 cell 数据变化时重新渲染
+                    const currentCell = () => gridCells()[index()];
+                    const isSingleSelected = () => selectedCell()?.row === cell.row && selectedCell()?.col === cell.col;
+                    const isRowSelected = () => selectedRow() === cell.row;
+                    const isColumnSelected = () => selectedColumn() === cell.col;
+                    const isMultiSelected = () => selectedCells().has(`${cell.row}-${cell.col}`);
+                    const isSelected = () => isSingleSelected() || isRowSelected() || isColumnSelected() || isMultiSelected();
                     
                     return (
                       <div
                         class="grid-cell"
                         classList={{
-                          selected: isSelected,
-                          'row-selected': isRowSelected,
-                          'column-selected': isColumnSelected,
-                          'multi-selected': isMultiSelected,
-                          filled: !!cell.imageUrl,
+                          selected: isSelected(),
+                          'row-selected': isRowSelected(),
+                          'column-selected': isColumnSelected(),
+                          'multi-selected': isMultiSelected(),
+                          filled: !!currentCell().imageUrl,
                         }}
                         onClick={(e) => selectCell(cell.row, cell.col, e.ctrlKey || e.metaKey)}
                         onDblClick={() => clearCell(cell.row, cell.col)}
-                        title={`行${cell.row + 1}, 列${cell.col + 1}${cell.imageUrl ? ' (双击清空)' : ''}`}
+                        title={`行${cell.row + 1}, 列${cell.col + 1}${currentCell().imageUrl ? ' (双击清空)' : ''}`}
                       >
-                        {cell.imageUrl && (
-                          <img src={cell.imageUrl} alt={`Cell ${cell.row}-${cell.col}`} />
-                        )}
+                        <Show when={currentCell().imageUrl}>
+                          <img src={currentCell().imageUrl!} alt={`Cell ${cell.row}-${cell.col}`} />
+                        </Show>
                       </div>
                     );
                   }}

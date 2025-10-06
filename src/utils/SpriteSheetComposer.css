@@ -443,21 +443,49 @@ details[open] summary {
 }
 
 .grid-cell.row-selected {
-  background: #d1fae5;
-  border-color: #10b981;
-  box-shadow: inset 0 0 0 1px rgba(16, 185, 129, 0.3);
+  border: 4px solid #10b981 !important;
+  box-shadow: 
+    0 0 0 2px rgba(16, 185, 129, 0.6),
+    0 0 12px rgba(16, 185, 129, 0.5),
+    inset 0 0 0 2px rgba(16, 185, 129, 0.3);
+  z-index: 15;
+  position: relative;
 }
 
 .grid-cell.column-selected {
-  background: #d1fae5;
-  border-color: #10b981;
-  box-shadow: inset 0 0 0 1px rgba(16, 185, 129, 0.3);
+  border: 4px solid #10b981 !important;
+  box-shadow: 
+    0 0 0 2px rgba(16, 185, 129, 0.6),
+    0 0 12px rgba(16, 185, 129, 0.5),
+    inset 0 0 0 2px rgba(16, 185, 129, 0.3);
+  z-index: 15;
+  position: relative;
 }
 
 .grid-cell.multi-selected {
-  background: #d1fae5;
-  border-color: #10b981;
-  box-shadow: inset 0 0 0 1px rgba(16, 185, 129, 0.3);
+  border: 4px solid #10b981 !important;
+  box-shadow: 
+    0 0 0 2px rgba(16, 185, 129, 0.6),
+    0 0 12px rgba(16, 185, 129, 0.5),
+    inset 0 0 0 2px rgba(16, 185, 129, 0.3);
+  z-index: 15;
+  position: relative;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    box-shadow: 
+      0 0 0 2px rgba(16, 185, 129, 0.6),
+      0 0 12px rgba(16, 185, 129, 0.5),
+      inset 0 0 0 2px rgba(16, 185, 129, 0.3);
+  }
+  50% {
+    box-shadow: 
+      0 0 0 2px rgba(16, 185, 129, 0.8),
+      0 0 20px rgba(16, 185, 129, 0.7),
+      inset 0 0 0 2px rgba(16, 185, 129, 0.5);
+  }
 }
 
 .grid-cell.filled {
@@ -557,6 +585,145 @@ details[open] summary {
   padding: 8px;
   display: block;
   margin: 0 auto;
+}
+
+/* 背景选择器 */
+.background-selector {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.bg-option {
+  padding: 4px;
+  border: 2px solid #ddd;
+  border-radius: 6px;
+  background: white;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.bg-option:hover {
+  border-color: #667eea;
+  transform: scale(1.05);
+}
+
+.bg-option.active {
+  border-color: #667eea;
+  box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.3);
+}
+
+.bg-preview {
+  width: 40px;
+  height: 40px;
+  border-radius: 4px;
+  border: 1px solid #e0e0e0;
+}
+
+.bg-preview.checkerboard {
+  background-image: 
+    linear-gradient(45deg, #ccc 25%, transparent 25%),
+    linear-gradient(-45deg, #ccc 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #ccc 75%),
+    linear-gradient(-45deg, transparent 75%, #ccc 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0px;
+  background-color: white;
+}
+
+/* 颜色选择器 */
+.color-picker-wrapper {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.color-picker-wrapper input[type="color"] {
+  width: 50px;
+  height: 40px;
+  border: 2px solid #ddd;
+  border-radius: 6px;
+  cursor: pointer;
+  padding: 2px;
+  transition: border-color 0.3s;
+}
+
+.color-picker-wrapper input[type="color"]:hover {
+  border-color: #667eea;
+}
+
+.color-input {
+  flex: 1;
+  padding: 10px;
+  border: 2px solid #ddd;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: monospace;
+  transition: border-color 0.3s;
+}
+
+.color-input:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+/* 最近使用的颜色 */
+.recent-colors {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 8px;
+  background: #f8f9fa;
+  border-radius: 6px;
+}
+
+.recent-colors span {
+  font-size: 12px;
+  color: #666;
+  font-weight: 500;
+}
+
+.recent-color-btn {
+  width: 28px;
+  height: 28px;
+  border: 2px solid #ddd;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  padding: 0;
+}
+
+.recent-color-btn:hover {
+  transform: scale(1.15);
+  border-color: #667eea;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* 选中信息提示 */
+.selection-info {
+  margin-top: 12px;
+  padding: 10px 14px;
+  background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+  border-left: 4px solid #10b981;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #065f46;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.2);
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* 响应式设计 */
