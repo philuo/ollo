@@ -1,5 +1,6 @@
 import { createSignal, For, Show, onMount } from 'solid-js';
 import './SpriteSheetComposer.css';
+import { encodeKTX2, estimateKTX2Size, getFormatDescription, type KTX2Format } from './ktx2-encoder';
 
 interface GridCell {
   row: number;
@@ -37,9 +38,10 @@ export default function SpriteSheetComposer() {
   const [gridGapVertical, setGridGapVertical] = createSignal(0);
   
   // 导出配置
-  const [exportFormat, setExportFormat] = createSignal<'png' | 'webp-high' | 'webp-compressed'>('png');
+  const [exportFormat, setExportFormat] = createSignal<'png' | 'webp-high' | 'webp-compressed' | 'ktx2-uncompressed' | 'ktx2-etc1s' | 'ktx2-uastc'>('png');
   const [exportScale, setExportScale] = createSignal(1);
   const [imageSmoothingEnabled, setImageSmoothingEnabled] = createSignal(false);
+  const [ktx2Quality, setKtx2Quality] = createSignal(128);
   
   // 动画播放配置
   const [selectionMode, setSelectionMode] = createSignal<'single' | 'row' | 'column' | 'multi'>('single');
@@ -284,6 +286,111 @@ export default function SpriteSheetComposer() {
     console.log(`网格已更新: ${numRows}行 x ${numCols}列`);
   };
 
+  // 导出为光栅格式（PNG/WebP）
+  const exportAsRaster = (
+    canvas: HTMLCanvasElement,
+    format: string,
+    scale: number,
+    scaledWidth: number,
+    scaledHeight: number
+  ) => {
+    let mimeType: string;
+    let quality: number | undefined;
+    let extension: string;
+
+    switch (format) {
+      case 'png':
+        mimeType = 'image/png';
+        quality = undefined;
+        extension = 'png';
+        break;
+      case 'webp-high':
+        mimeType = 'image/webp';
+        quality = 1.0;
+        extension = 'webp';
+        break;
+      case 'webp-compressed':
+        mimeType = 'image/webp';
+        quality = 0.8;
+        extension = 'webp';
+        break;
+      default:
+        mimeType = 'image/png';
+        extension = 'png';
+    }
+
+    canvas.toBlob(
+      blob => {
+        if (blob) {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          const scaleStr = scale > 1 ? `_${scale}x` : '';
+          a.download = `spritesheet${scaleStr}_${Date.now()}.${extension}`;
+          a.click();
+          URL.revokeObjectURL(url);
+          
+          const sizeKB = (blob.size / 1024).toFixed(2);
+          console.log(`雪碧图已导出: ${extension.toUpperCase()}, ${scaledWidth}x${scaledHeight}, ${sizeKB}KB`);
+          alert(`导出成功！\n格式: ${extension.toUpperCase()}\n尺寸: ${scaledWidth}x${scaledHeight}\n大小: ${sizeKB}KB`);
+        }
+      },
+      mimeType,
+      quality
+    );
+  };
+
+  // 导出为 KTX2 格式
+  const exportAsKTX2 = async (
+    canvas: HTMLCanvasElement,
+    format: string,
+    scale: number,
+    scaledWidth: number,
+    scaledHeight: number
+  ) => {
+    try {
+      let ktx2Format: KTX2Format;
+      
+      switch (format) {
+        case 'ktx2-uncompressed':
+          ktx2Format = 'uncompressed';
+          break;
+        case 'ktx2-etc1s':
+          ktx2Format = 'etc1s';
+          break;
+        case 'ktx2-uastc':
+          ktx2Format = 'uastc';
+          break;
+        default:
+          ktx2Format = 'uncompressed';
+      }
+
+      // 编码为 KTX2
+      const ktx2Data = await encodeKTX2(canvas, {
+        format: ktx2Format,
+        quality: ktx2Quality(),
+      });
+
+      // 下载文件
+      const blob = new Blob([ktx2Data], { type: 'application/octet-stream' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const scaleStr = scale > 1 ? `_${scale}x` : '';
+      a.download = `spritesheet${scaleStr}_${Date.now()}.ktx2`;
+      a.click();
+      URL.revokeObjectURL(url);
+      
+      const sizeKB = (blob.size / 1024).toFixed(2);
+      const compressionRatio = ((1 - blob.size / (scaledWidth * scaledHeight * 4)) * 100).toFixed(1);
+      console.log(`KTX2 已导出: ${ktx2Format}, ${scaledWidth}x${scaledHeight}, ${sizeKB}KB, 压缩率: ${compressionRatio}%`);
+      alert(`导出成功！\n格式: KTX2 (${ktx2Format})\n尺寸: ${scaledWidth}x${scaledHeight}\n大小: ${sizeKB}KB\n压缩率: ${compressionRatio}%`);
+    } catch (error) {
+      console.error('KTX2 编码失败:', error);
+      alert(`KTX2 导出失败: ${error}`);
+    }
+  };
+
   // 导出雪碧图
   const exportSpriteSheet = () => {
     if (!canvasRef) return;
@@ -353,47 +460,12 @@ export default function SpriteSheetComposer() {
 
           // 所有图片加载完成后导出
           if (loadedCount === totalImages) {
-            let mimeType: string;
-            let quality: number | undefined;
-            let extension: string;
-
-            switch (format) {
-              case 'png':
-                mimeType = 'image/png';
-                quality = undefined; // PNG总是无损的
-                extension = 'png';
-                break;
-              case 'webp-high':
-                mimeType = 'image/webp';
-                quality = 1.0; // 最高质量（接近无损）
-                extension = 'webp';
-                break;
-              case 'webp-compressed':
-                mimeType = 'image/webp';
-                quality = 0.8; // 压缩质量（文件更小）
-                extension = 'webp';
-                break;
+            // 判断是否为 KTX2 格式
+            if (format.startsWith('ktx2-')) {
+              exportAsKTX2(canvasRef!, format, scale, scaledWidth, scaledHeight);
+            } else {
+              exportAsRaster(canvasRef!, format, scale, scaledWidth, scaledHeight);
             }
-
-            canvasRef?.toBlob(
-              blob => {
-                if (blob) {
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement('a');
-                  a.href = url;
-                  const scaleStr = scale > 1 ? `_${scale}x` : '';
-                  a.download = `spritesheet${scaleStr}_${Date.now()}.${extension}`;
-                  a.click();
-                  URL.revokeObjectURL(url);
-                  
-                  const sizeKB = (blob.size / 1024).toFixed(2);
-                  console.log(`雪碧图已导出: ${extension.toUpperCase()}, ${scaledWidth}x${scaledHeight}, ${sizeKB}KB`);
-                  alert(`导出成功！\n格式: ${extension.toUpperCase()}\n尺寸: ${scaledWidth}x${scaledHeight}\n大小: ${sizeKB}KB`);
-                }
-              },
-              mimeType,
-              quality
-            );
           }
         };
         img.src = cell.imageUrl;
@@ -938,12 +1010,50 @@ export default function SpriteSheetComposer() {
                     value={exportFormat()}
                     onChange={e => setExportFormat(e.currentTarget.value as any)}
                   >
-                    <option value="png">PNG (无损)</option>
-                    <option value="webp-high">WebP (高质量)</option>
-                    <option value="webp-compressed">WebP (压缩)</option>
+                    <optgroup label="光栅格式">
+                      <option value="png">PNG (无损)</option>
+                      <option value="webp-high">WebP (高质量)</option>
+                      <option value="webp-compressed">WebP (压缩)</option>
+                    </optgroup>
+                    <optgroup label="KTX2 纹理格式">
+                      <option value="ktx2-uncompressed">KTX2 未压缩 (最大质量)</option>
+                      <option value="ktx2-etc1s">KTX2 ETC1S (最小体积)</option>
+                      <option value="ktx2-uastc">KTX2 UASTC (高质量)</option>
+                    </optgroup>
                   </select>
                 </label>
               </div>
+
+              <Show when={exportFormat().startsWith('ktx2-')}>
+                <div class="input-group">
+                  <label>
+                    KTX2 质量 (0-255):
+                    <input
+                      type="range"
+                      value={ktx2Quality()}
+                      onInput={e => setKtx2Quality(parseInt(e.currentTarget.value))}
+                      min="0"
+                      max="255"
+                      step="1"
+                    />
+                    <span class="quality-value">{ktx2Quality()}</span>
+                  </label>
+                </div>
+                
+                <div class="info-box" style="font-size: 11px; margin-top: 8px;">
+                  <p><strong>💾 KTX2 说明:</strong></p>
+                  <p>• <strong>未压缩</strong>: 无损，GPU 直接使用，最快加载</p>
+                  <p>• <strong>ETC1S</strong>: 模拟压缩，体积最小（~25%）</p>
+                  <p>• <strong>UASTC</strong>: 高质量，适合桌面端</p>
+                  <p style="margin-top: 6px;">
+                    <strong>预估大小:</strong> {(estimateKTX2Size(
+                      canvasWidth() * exportScale(),
+                      canvasHeight() * exportScale(),
+                      exportFormat().replace('ktx2-', '') as KTX2Format
+                    ) / 1024).toFixed(2)}KB
+                  </p>
+                </div>
+              </Show>
 
               <div class="input-group">
                 <label>
