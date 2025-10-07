@@ -1,0 +1,370 @@
+/**
+ * TileMap 编辑器样式
+ */
+
+.tilemap-editor {
+  display: flex;
+  flex-direction: column;
+  width: 100vw;
+  height: 100vh;
+  background-color: #1e1e1e;
+  color: #d4d4d4;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  overflow: hidden;
+}
+
+/* 工具栏 */
+.toolbar {
+  display: flex;
+  gap: 20px;
+  padding: 10px 20px;
+  background-color: #252526;
+  border-bottom: 1px solid #3e3e42;
+  flex-shrink: 0;
+}
+
+.toolbar-section {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.toolbar-section h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #cccccc;
+  margin-right: 5px;
+}
+
+.toolbar button {
+  padding: 6px 12px;
+  background-color: #0e639c;
+  color: white;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background-color 0.2s;
+}
+
+.toolbar button:hover {
+  background-color: #1177bb;
+}
+
+.toolbar button.active {
+  background-color: #1177bb;
+  box-shadow: inset 0 0 0 2px #ffffff55;
+}
+
+.toolbar label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.toolbar select {
+  padding: 5px 10px;
+  background-color: #3c3c3c;
+  color: #d4d4d4;
+  border: 1px solid #3e3e42;
+  border-radius: 3px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.toolbar select:focus {
+  outline: none;
+  border-color: #0e639c;
+}
+
+/* 工作区 */
+.workspace {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* 画布容器 */
+.canvas-container {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: #1e1e1e;
+  position: relative;
+  overflow: hidden;
+}
+
+.canvas-container canvas {
+  border: 1px solid #3e3e42;
+  cursor: crosshair;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+/* 侧边栏 */
+.sidebar {
+  width: 320px;
+  background-color: #252526;
+  border-left: 1px solid #3e3e42;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+
+/* 面板 */
+.panel {
+  padding: 15px;
+  border-bottom: 1px solid #3e3e42;
+}
+
+.panel h3 {
+  margin: 0 0 10px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #cccccc;
+}
+
+.panel button {
+  width: 100%;
+  padding: 8px 12px;
+  background-color: #0e639c;
+  color: white;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 13px;
+  margin-bottom: 10px;
+  transition: background-color 0.2s;
+}
+
+.panel button:hover {
+  background-color: #1177bb;
+}
+
+.panel > div {
+  font-size: 13px;
+  line-height: 1.6;
+  color: #cccccc;
+}
+
+/* 瓦片集列表 */
+.tileset-item {
+  padding: 8px 12px;
+  margin-bottom: 5px;
+  background-color: #2d2d30;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background-color 0.2s;
+}
+
+.tileset-item:hover {
+  background-color: #3e3e42;
+}
+
+.tileset-item.selected {
+  background-color: #0e639c;
+  color: white;
+}
+
+/* 瓦片集预览 */
+.tileset-preview-container {
+  max-height: 400px;
+  overflow: auto;
+  background-color: #2d2d30;
+  border-radius: 3px;
+  padding: 10px;
+}
+
+.tileset-preview-container canvas {
+  display: block;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  cursor: pointer;
+  border: 1px solid #3e3e42;
+}
+
+/* 滚动条样式 */
+.sidebar::-webkit-scrollbar,
+.tileset-preview-container::-webkit-scrollbar {
+  width: 10px;
+}
+
+.sidebar::-webkit-scrollbar-track,
+.tileset-preview-container::-webkit-scrollbar-track {
+  background: #1e1e1e;
+}
+
+.sidebar::-webkit-scrollbar-thumb,
+.tileset-preview-container::-webkit-scrollbar-thumb {
+  background: #424242;
+  border-radius: 5px;
+}
+
+.sidebar::-webkit-scrollbar-thumb:hover,
+.tileset-preview-container::-webkit-scrollbar-thumb:hover {
+  background: #4e4e4e;
+}
+
+/* 响应式设计 */
+@media (max-width: 1024px) {
+  .sidebar {
+    width: 280px;
+  }
+  
+  .toolbar {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+}
+
+@media (max-width: 768px) {
+  .workspace {
+    flex-direction: column;
+  }
+  
+  .sidebar {
+    width: 100%;
+    max-height: 40vh;
+    border-left: none;
+    border-top: 1px solid #3e3e42;
+  }
+  
+  .canvas-container canvas {
+    max-width: 100%;
+    max-height: 100%;
+  }
+}
+
+/* 工具提示 */
+button[title]:hover::after,
+.toolbar-section label[title]:hover::after {
+  content: attr(title);
+  position: absolute;
+  bottom: -25px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 8px;
+  background-color: #1e1e1e;
+  color: #d4d4d4;
+  font-size: 12px;
+  white-space: nowrap;
+  border-radius: 3px;
+  border: 1px solid #3e3e42;
+  z-index: 1000;
+  pointer-events: none;
+}
+
+/* 加载状态 */
+.loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+  font-size: 16px;
+  color: #cccccc;
+}
+
+/* 错误提示 */
+.error {
+  padding: 10px 15px;
+  margin: 10px;
+  background-color: #5a1d1d;
+  border: 1px solid #be1100;
+  border-radius: 3px;
+  color: #f48771;
+  font-size: 13px;
+}
+
+/* 动画 */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.tilemap-editor {
+  animation: fadeIn 0.3s ease-in;
+}
+
+/* 网格高亮 */
+.canvas-container canvas.grid-enabled {
+  background-image: 
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 31px,
+      rgba(255, 255, 255, 0.05) 31px,
+      rgba(255, 255, 255, 0.05) 32px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      transparent,
+      transparent 31px,
+      rgba(255, 255, 255, 0.05) 31px,
+      rgba(255, 255, 255, 0.05) 32px
+    );
+}
+
+/* 拖拽状态 */
+.canvas-container.panning canvas {
+  cursor: grabbing !important;
+}
+
+/* 选中的瓦片高亮 */
+.tileset-preview-container canvas {
+  position: relative;
+}
+
+/* 缩放控制 */
+.zoom-controls {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  display: flex;
+  gap: 5px;
+  background-color: #252526;
+  padding: 5px;
+  border-radius: 3px;
+  border: 1px solid #3e3e42;
+}
+
+.zoom-controls button {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  background-color: #3c3c3c;
+  color: #d4d4d4;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s;
+}
+
+.zoom-controls button:hover {
+  background-color: #4e4e4e;
+}
+
+.zoom-controls .zoom-level {
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  font-size: 13px;
+  color: #cccccc;
+  min-width: 50px;
+  justify-content: center;
+}
+
