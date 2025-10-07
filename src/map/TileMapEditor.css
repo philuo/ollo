@@ -100,9 +100,12 @@
 
 .canvas-container canvas {
   border: 1px solid #3e3e42;
-  cursor: crosshair;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
+}
+
+.canvas-container > div {
+  border: 1px solid #3e3e42;
 }
 
 /* 侧边栏 */
@@ -366,5 +369,111 @@ button[title]:hover::after,
   color: #cccccc;
   min-width: 50px;
   justify-content: center;
+}
+
+/* 网格设置 */
+.grid-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.grid-settings label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: #cccccc;
+}
+
+.grid-settings input[type="number"] {
+  padding: 6px 8px;
+  background-color: #3c3c3c;
+  color: #d4d4d4;
+  border: 1px solid #3e3e42;
+  border-radius: 3px;
+  font-size: 13px;
+}
+
+.grid-settings input[type="number"]:focus {
+  outline: none;
+  border-color: #0e639c;
+}
+
+.grid-info {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px;
+  background-color: #2d2d30;
+  border-radius: 3px;
+  font-size: 12px;
+  color: #0e639c;
+}
+
+/* 选择信息 */
+.selection-info {
+  margin-top: 10px;
+  padding: 10px;
+  background-color: #2d2d30;
+  border-radius: 3px;
+}
+
+.selection-info p {
+  margin: 0 0 8px 0;
+  font-size: 13px;
+  color: #cccccc;
+}
+
+.selection-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.selection-actions button {
+  flex: 1;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+/* 信息内容 */
+.info-content {
+  margin-bottom: 15px;
+}
+
+.info-content > div {
+  padding: 6px 0;
+  border-bottom: 1px solid #3e3e42;
+}
+
+.info-content > div:last-child {
+  border-bottom: none;
+}
+
+/* 键盘提示 */
+.keyboard-hints {
+  margin-top: 15px;
+  padding: 10px;
+  background-color: #2d2d30;
+  border-radius: 3px;
+}
+
+.keyboard-hints h4 {
+  margin: 0 0 8px 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #cccccc;
+}
+
+.keyboard-hints > div {
+  padding: 4px 0;
+  font-size: 11px;
+  color: #a8a8a8;
+  font-family: 'Consolas', 'Monaco', monospace;
+}
+
+/* 瓦片选择高亮 */
+.tileset-preview-container canvas {
+  cursor: crosshair;
+  user-select: none;
 }
 
