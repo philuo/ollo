@@ -79,6 +79,27 @@ export default function SpriteSheetComposer() {
   // 精确的网格尺寸（用于 CSS Grid 布局，避免尺寸溢出）
   const [exactGridWidth, setExactGridWidth] = createSignal(0);
   const [exactGridHeight, setExactGridHeight] = createSignal(0);
+  
+  // 计算显示网格尺寸（逻辑缩放，最大边为64px）
+  const displayGridWidth = () => {
+    const exactW = exactGridWidth() || gridWidth();
+    const exactH = exactGridHeight() || gridHeight();
+    if (!exactW || !exactH) return gridWidth();
+    
+    const maxEdge = Math.max(exactW, exactH);
+    const scale = Math.min(1, 64 / maxEdge); // 最大边缩放到64px
+    return exactW * scale;
+  };
+  
+  const displayGridHeight = () => {
+    const exactW = exactGridWidth() || gridWidth();
+    const exactH = exactGridHeight() || gridHeight();
+    if (!exactW || !exactH) return gridHeight();
+    
+    const maxEdge = Math.max(exactW, exactH);
+    const scale = Math.min(1, 64 / maxEdge);
+    return exactH * scale;
+  };
 
   
   // 创建画布和网格
@@ -221,8 +242,15 @@ export default function SpriteSheetComposer() {
       setRows(numRows);
       setCanvasCreated(true);
       
-      console.log(`画布配置: 原图${img.width}x${img.height}, 显示网格${gridW}x${gridH}, ${numRows}行x${numCols}列=${numRows * numCols}个切片`);
-      console.log(`精确网格尺寸: ${exactGridW.toFixed(2)}x${exactGridH.toFixed(2)} (显示为 ${gridW}x${gridH})`);
+      // 计算显示缩放
+      const maxEdge = Math.max(exactGridW, exactGridH);
+      const displayScale = Math.min(1, 64 / maxEdge);
+      const displayW = exactGridW * displayScale;
+      const displayH = exactGridH * displayScale;
+      
+      console.log(`画布配置: 原图${img.width}x${img.height}, ${numRows}行x${numCols}列=${numRows * numCols}个切片`);
+      console.log(`实际网格: ${exactGridW.toFixed(2)}x${exactGridH.toFixed(2)} 像素`);
+      console.log(`显示网格: ${displayW.toFixed(1)}x${displayH.toFixed(1)} 像素 (缩放 ${displayScale.toFixed(2)}x)`);
       
       // 批量切分所有图片（使用精确浮点数坐标，避免丢失像素）
       const slicePromises: Promise<{ row: number; col: number; url: string; bitmap: ImageBitmap }>[] = [];
@@ -1231,11 +1259,13 @@ export default function SpriteSheetComposer() {
               <div class="info-box">
                 <p><strong>📥 导出尺寸:</strong> {canvasWidth()} x {canvasHeight()} 像素</p>
                 <Show when={exactGridWidth() > 0}>
-                  <p><strong>🔍 精确网格:</strong> {exactGridWidth().toFixed(2)} x {exactGridHeight().toFixed(2)} 像素</p>
-                  <p style="font-size: 11px; color: #666;">（显示为 {gridWidth()} x {gridHeight()}，CSS自动处理小数）</p>
+                  <p><strong>📐 实际网格:</strong> {exactGridWidth().toFixed(2)} x {exactGridHeight().toFixed(2)} 像素</p>
+                  <p><strong>🖥️ 显示网格:</strong> {displayGridWidth().toFixed(1)} x {displayGridHeight().toFixed(1)} 像素</p>
+                  <p style="font-size: 11px; color: #10b981;">✅ 缩放比例: {(displayGridWidth() / (exactGridWidth() || 1)).toFixed(2)}x（最大边64px）</p>
                 </Show>
                 <Show when={exactGridWidth() === 0}>
                   <p><strong>网格尺寸:</strong> {gridWidth()} x {gridHeight()} 像素</p>
+                  <p><strong>显示网格:</strong> {displayGridWidth().toFixed(1)} x {displayGridHeight().toFixed(1)} 像素</p>
                 </Show>
                 <p><strong>网格数量:</strong> {rows()} 行 x {cols()} 列 = {rows() * cols()} 个</p>
               </div>
@@ -1738,8 +1768,8 @@ export default function SpriteSheetComposer() {
                 class="grid-overlay"
                 style={{
                   padding: `${canvasPaddingTop()}px ${canvasPaddingRight()}px ${canvasPaddingBottom()}px ${canvasPaddingLeft()}px`,
-                  'grid-template-columns': `repeat(${cols()}, ${exactGridWidth() || gridWidth()}px)`,
-                  'grid-template-rows': `repeat(${rows()}, ${exactGridHeight() || gridHeight()}px)`,
+                  'grid-template-columns': `repeat(${cols()}, ${displayGridWidth()}px)`,
+                  'grid-template-rows': `repeat(${rows()}, ${displayGridHeight()}px)`,
                   'column-gap': `${gridGapHorizontal()}px`,
                   'row-gap': `${gridGapVertical()}px`,
                 }}
