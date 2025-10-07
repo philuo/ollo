@@ -51,6 +51,8 @@ export default function SpriteSheetComposer() {
   const [currentFrame, setCurrentFrame] = createSignal(0);
   const [selectedRow, setSelectedRow] = createSignal<number | null>(null);
   const [selectedColumn, setSelectedColumn] = createSignal<number | null>(null);
+  const [playMode, setPlayMode] = createSignal<'loop' | 'once'>('loop'); // 默认循环播放
+  const [showCanvas, setShowCanvas] = createSignal(false); // 控制画布显示
   
   // 动画背景配置
   const [canvasBackground, setCanvasBackground] = createSignal<'transparent' | 'white' | 'black' | 'custom'>('transparent');
@@ -63,6 +65,7 @@ export default function SpriteSheetComposer() {
   let animationPreviewCanvas: HTMLCanvasElement | undefined;
   let animationFrameId: number | undefined;
   let lastFrameTime: number = 0;
+  let hideCanvasTimeout: number | undefined;
   
   // 图片缓存：使用 ImageBitmap 而不是 blob URL
   const imageBitmapCache = new Map<string, ImageBitmap>();
@@ -630,7 +633,7 @@ export default function SpriteSheetComposer() {
   // 播放/暂停动画
   const toggleAnimation = () => {
     if (isPlaying()) {
-      stopAnimation();
+      pauseAnimation();
     } else {
       startAnimation();
     }
@@ -644,7 +647,14 @@ export default function SpriteSheetComposer() {
       return;
     }
     
+    // 清除之前的延迟隐藏定时器（如果有）
+    if (hideCanvasTimeout !== undefined) {
+      clearTimeout(hideCanvasTimeout);
+      hideCanvasTimeout = undefined;
+    }
+    
     setIsPlaying(true);
+    setShowCanvas(true); // 显示画布
     setCurrentFrame(0);
     lastFrameTime = performance.now();
     
@@ -660,7 +670,29 @@ export default function SpriteSheetComposer() {
       
       // 当经过的时间超过一帧的持续时间时，切换到下一帧
       if (elapsed >= frameDuration) {
-        const newFrameIndex = (currentFrame() + 1) % getSelectedFrames().length;
+        const totalFrames = getSelectedFrames().length;
+        const currentFrameIndex = currentFrame();
+        const nextFrameIndex = currentFrameIndex + 1;
+        
+        // 检查播放模式
+        if (playMode() === 'once' && nextFrameIndex >= totalFrames) {
+          // 单次播放模式：播放到最后一帧后停止
+          setCurrentFrame(totalFrames - 1);
+          drawAnimationFrame(totalFrames - 1);
+          stopAnimation();
+          console.log('动画播放完成（单次模式），3秒后隐藏画布');
+          
+          // 延迟3秒后隐藏画布
+          hideCanvasTimeout = window.setTimeout(() => {
+            setShowCanvas(false);
+            console.log('动画画布已隐藏');
+          }, 3000);
+          
+          return;
+        }
+        
+        // 循环模式或未到达最后一帧
+        const newFrameIndex = nextFrameIndex % totalFrames;
         setCurrentFrame(newFrameIndex);
         
         // 使用 Canvas 绘制帧（高性能）
@@ -682,6 +714,17 @@ export default function SpriteSheetComposer() {
       cancelAnimationFrame(animationFrameId);
       animationFrameId = undefined;
     }
+    // 清除延迟隐藏的定时器
+    if (hideCanvasTimeout !== undefined) {
+      clearTimeout(hideCanvasTimeout);
+      hideCanvasTimeout = undefined;
+    }
+  };
+  
+  // 手动暂停（立即隐藏画布）
+  const pauseAnimation = () => {
+    stopAnimation();
+    setShowCanvas(false);
   };
   
   // 清理资源
@@ -1084,6 +1127,19 @@ export default function SpriteSheetComposer() {
                 </div>
 
                 <div class="input-group">
+                  <label>
+                    播放模式:
+                    <select
+                      value={playMode()}
+                      onChange={e => setPlayMode(e.currentTarget.value as any)}
+                    >
+                      <option value="loop">🔁 循环播放（默认）</option>
+                      <option value="once">▶️ 播放一次</option>
+                    </select>
+                  </label>
+                </div>
+
+                <div class="input-group">
                   <label>画布背景:</label>
                   <div class="background-selector">
                     <button
@@ -1182,7 +1238,7 @@ export default function SpriteSheetComposer() {
                   </Show>
                 </div>
 
-                <Show when={getSelectedFrames().length > 0 && isPlaying()}>
+                <Show when={getSelectedFrames().length > 0 && showCanvas()}>
                   <div class="animation-preview">
                     <canvas
                       ref={animationPreviewCanvas}
@@ -1199,6 +1255,7 @@ export default function SpriteSheetComposer() {
                   <p style="margin-left: 16px;">- Mac: ⌘ Command + 点击选中/取消</p>
                   <p style="margin-left: 16px;">- Win: Ctrl + 点击选中/取消</p>
                   <p style="margin-left: 16px;">- 已选网格显示绿色边框 🟢</p>
+                  <p>• <strong>播放模式</strong>: 循环播放 🔁 或播放一次 ▶️</p>
                   <p>• <strong>背景</strong>: 选择合适的背景查看透明区域</p>
                 </div>
 
