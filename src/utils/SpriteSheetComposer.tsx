@@ -66,9 +66,15 @@ export default function SpriteSheetComposer() {
   let animationFrameId: number | undefined;
   let lastFrameTime: number = 0;
   let hideCanvasTimeout: number | undefined;
+  let spritesheetInputRef: HTMLInputElement | undefined;
   
   // 图片缓存：使用 ImageBitmap 而不是 blob URL
   const imageBitmapCache = new Map<string, ImageBitmap>();
+  
+  // 雪碧图导入配置
+  const [spritesheetUrl, setSpritesheetUrl] = createSignal<string | null>(null);
+  const [spritesheetRows, setSpritesheetRows] = createSignal(1);
+  const [spritesheetCols, setSpritesheetCols] = createSignal(1);
 
   // 创建画布和网格
   const createCanvas = () => {
@@ -123,6 +129,208 @@ export default function SpriteSheetComposer() {
     setGridCells([]);
     setSelectedCell(null);
     setUploadedImages([]);
+    setSpritesheetUrl(null);
+  };
+  
+  // 处理雪碧图上传
+  const handleSpritesheetUpload = (e: Event) => {
+    const input = e.target as HTMLInputElement;
+    if (!input.files || input.files.length === 0) return;
+    
+    const file = input.files[0];
+    if (!file.type.startsWith('image/')) {
+      alert('请选择图片文件');
+      return;
+    }
+    
+    const url = URL.createObjectURL(file);
+    setSpritesheetUrl(url);
+  };
+  
+  // 从雪碧图创建画布并自动切分
+  const createCanvasFromSpritesheet = async () => {
+    const imageUrl = spritesheetUrl();
+    if (!imageUrl) {
+      alert('请先上传雪碧图');
+      return;
+    }
+    
+    const numRows = spritesheetRows();
+    const numCols = spritesheetCols();
+    
+    if (numRows < 1 || numCols < 1) {
+      alert('行数和列数必须大于0');
+      return;
+    }
+    
+    try {
+      console.log(`开始处理雪碧图: ${numRows}行 x ${numCols}列`);
+      const startTime = performance.now();
+      
+      // 加载图片
+      const img = new Image();
+      img.src = imageUrl;
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
+      });
+      
+      console.log(`图片加载完成: ${img.width}x${img.height}`);
+      
+      // ⚠️ 关键修复：使用精确的浮点数计算网格大小
+      // 不能用 Math.floor，否则会丢失边缘像素！
+      const exactGridW = img.width / numCols;   // 例如: 512/20 = 25.6
+      const exactGridH = img.height / numRows;  // 例如: 512/20 = 25.6
+      
+      // 显示网格需要是整数，向上取整确保不丢失像素
+      const gridW = Math.ceil(exactGridW);      // 26
+      const gridH = Math.ceil(exactGridH);      // 26
+      
+      // ⚠️ 自动拆分模式：重置所有配置，使用最简单的布局
+      // 画布大小需要容纳所有网格（可能比原图稍大）
+      const canvasW = gridW * numCols;          // 26 * 20 = 520
+      const canvasH = gridH * numRows;          // 26 * 20 = 520
+      
+      setCanvasWidth(canvasW);
+      setCanvasHeight(canvasH);
+      setGridWidth(gridW);
+      setGridHeight(gridH);
+      
+      // 清零所有 padding 和 gap（自动拆分不需要这些）
+      setCanvasPaddingTop(0);
+      setCanvasPaddingRight(0);
+      setCanvasPaddingBottom(0);
+      setCanvasPaddingLeft(0);
+      setGridPaddingTop(0);
+      setGridPaddingRight(0);
+      setGridPaddingBottom(0);
+      setGridPaddingLeft(0);
+      setGridGapHorizontal(0);
+      setGridGapVertical(0);
+      
+      // 设置行列数
+      setCols(numCols);
+      setRows(numRows);
+      setCanvasCreated(true);
+      
+      console.log(`画布配置: 原图${img.width}x${img.height} → 画布${canvasW}x${canvasH}, 网格${gridW}x${gridH}, ${numRows}行x${numCols}列=${numRows * numCols}个切片`);
+      console.log(`精确网格尺寸: ${exactGridW.toFixed(2)}x${exactGridH.toFixed(2)} (向上取整为 ${gridW}x${gridH})`);
+      
+      // 批量切分所有图片（使用精确浮点数坐标，避免丢失像素）
+      const slicePromises: Promise<{ row: number; col: number; url: string; bitmap: ImageBitmap }>[] = [];
+      
+      for (let row = 0; row < numRows; row++) {
+        for (let col = 0; col < numCols; col++) {
+          // 每个切片使用独立的 canvas，确保并行处理安全
+          const promise = (async (r: number, c: number) => {
+            // ⚠️ 使用精确的浮点数坐标切分（Canvas API 支持亚像素精度）
+            const srcX = c * exactGridW;  // 精确坐标，例如 25.6, 51.2, 76.8...
+            const srcY = r * exactGridH;
+            const srcW = exactGridW;       // 精确宽度 25.6
+            const srcH = exactGridH;       // 精确高度 25.6
+            
+            // 为每个切片创建独立的临时 canvas（使用整数尺寸）
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = gridW;   // 向上取整的整数尺寸
+            tempCanvas.height = gridH;
+            const ctx = tempCanvas.getContext('2d', { 
+              alpha: true,
+              willReadFrequently: false
+            });
+            
+            if (!ctx) {
+              throw new Error(`无法创建切片 [${r},${c}] 的画布上下文`);
+            }
+            
+            // ⚠️ 绘制切片：使用精确的浮点数源坐标，填充到整数目标画布
+            // Canvas API 会自动处理亚像素插值
+            ctx.drawImage(
+              img,
+              srcX, srcY, srcW, srcH,  // 源图区域（精确浮点数）
+              0, 0, gridW, gridH        // 目标区域（整数）
+            );
+            
+            // 直接从源图创建 ImageBitmap（用于高性能渲染）
+            const bitmap = await createImageBitmap(
+              img,
+              srcX, srcY, srcW, srcH
+            );
+            
+            // 转换为 Blob URL（用于显示和导出）
+            const blob = await new Promise<Blob>((resolve, reject) => {
+              tempCanvas.toBlob((b) => {
+                if (b) resolve(b);
+                else reject(new Error(`切片 [${r},${c}] 转换失败`));
+              }, 'image/png');
+            });
+            
+            const sliceUrl = URL.createObjectURL(blob);
+            
+            console.log(`✓ 切片 [${r},${c}] 源(${srcX.toFixed(1)},${srcY.toFixed(1)}) ${srcW.toFixed(1)}x${srcH.toFixed(1)} → 目标 ${gridW}x${gridH}`);
+            
+            return { row: r, col: c, url: sliceUrl, bitmap };
+          })(row, col);
+          
+          slicePromises.push(promise);
+        }
+      }
+      
+      console.log(`🚀 开始并行切分 ${slicePromises.length} 个切片...`);
+      
+      // 等待所有切片完成
+      const slices = await Promise.all(slicePromises);
+      
+      console.log(`✅ 切分完成，耗时 ${(performance.now() - startTime).toFixed(2)}ms`);
+      
+      // 创建一个 Map 用于快速查找切片（避免多次 find）
+      const sliceMap = new Map<string, { url: string; bitmap: ImageBitmap }>();
+      slices.forEach(slice => {
+        const key = `${slice.row}-${slice.col}`;
+        sliceMap.set(key, { url: slice.url, bitmap: slice.bitmap });
+      });
+      
+      // 批量构建网格数据和图片库（按行列顺序）
+      const newCells: GridCell[] = [];
+      const newImages: string[] = [];
+      
+      for (let row = 0; row < numRows; row++) {
+        for (let col = 0; col < numCols; col++) {
+          const key = `${row}-${col}`;
+          const slice = sliceMap.get(key);
+          
+          if (slice) {
+            newCells.push({ row, col, imageUrl: slice.url });
+            newImages.push(slice.url);
+            imageBitmapCache.set(slice.url, slice.bitmap);
+          } else {
+            console.warn(`⚠️ 未找到切片 [${row},${col}]`);
+            newCells.push({ row, col, imageUrl: null });
+          }
+        }
+      }
+      
+      console.log(`📦 构建完成: ${newCells.length} 个网格，${newImages.length} 张图片`);
+      
+      // 一次性更新所有状态（避免多次渲染）
+      setGridCells(newCells);
+      setUploadedImages(prev => [...prev, ...newImages]);
+      
+      const endTime = performance.now();
+      const totalTime = (endTime - startTime).toFixed(2);
+      
+      console.log(`✅ 雪碧图处理完成！总耗时: ${totalTime}ms`);
+      alert(`成功导入雪碧图！\n切分为 ${numRows} x ${numCols} = ${numRows * numCols} 张图片\n耗时: ${totalTime}ms`);
+      
+      // 清空状态
+      setSpritesheetUrl(null);
+      if (spritesheetInputRef) {
+        spritesheetInputRef.value = '';
+      }
+      
+    } catch (error) {
+      console.error('雪碧图导入失败:', error);
+      alert(`雪碧图导入失败: ${error}`);
+    }
   };
 
   // 上传图片并预加载为 ImageBitmap
@@ -747,7 +955,78 @@ export default function SpriteSheetComposer() {
         <div class="config-panel">
           <Show when={!canvasCreated()}>
             <div class="section">
-              <h2>画布配置</h2>
+              <h2>🎯 自动拆分模式</h2>
+              <div class="info-box" style="font-size: 12px; margin-bottom: 12px;">
+                <p><strong>💡 使用说明:</strong></p>
+                <p>1. 上传一张完整的雪碧图（如 512x512）</p>
+                <p>2. 输入行数和列数（如 20x20 = 400个切片）</p>
+                <p>3. 点击"自动切分"按钮</p>
+                <p>4. 系统会精确切分，不丢失任何像素</p>
+                <p style="margin-top: 8px; color: #10b981;"><strong>✅ 智能切分:</strong> 支持非整数网格（如 512÷20=25.6），自动处理亚像素精度</p>
+                <p style="margin-top: 4px; color: #f59e0b;"><strong>⚠️ 注意:</strong> 自动拆分会清零所有 padding 和 gap 配置</p>
+              </div>
+              
+              <input
+                ref={spritesheetInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleSpritesheetUpload}
+                style={{ display: 'none' }}
+              />
+              
+              <button 
+                class="btn-secondary" 
+                onClick={() => spritesheetInputRef?.click()}
+                style="margin-bottom: 12px; width: 100%;"
+              >
+                📁 上传雪碧图
+              </button>
+              
+              <Show when={spritesheetUrl()}>
+                <div style="margin-bottom: 12px;">
+                  <img 
+                    src={spritesheetUrl()!} 
+                    alt="雪碧图预览" 
+                    style="max-width: 100%; border: 2px solid #4CAF50; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);"
+                  />
+                </div>
+                
+                <div class="input-group" style="margin-bottom: 12px;">
+                  <label>
+                    行数:
+                    <input
+                      type="number"
+                      value={spritesheetRows()}
+                      onInput={e => setSpritesheetRows(parseInt(e.currentTarget.value) || 1)}
+                      min="1"
+                    />
+                  </label>
+                  <label>
+                    列数:
+                    <input
+                      type="number"
+                      value={spritesheetCols()}
+                      onInput={e => setSpritesheetCols(parseInt(e.currentTarget.value) || 1)}
+                      min="1"
+                    />
+                  </label>
+                </div>
+                
+                <button 
+                  class="btn-success" 
+                  onClick={createCanvasFromSpritesheet}
+                  style="width: 100%; font-weight: bold;"
+                >
+                  ✂️ 自动切分并创建画布
+                </button>
+                
+                <div style="border-top: 2px dashed #ccc; margin: 20px 0;"></div>
+              </Show>
+            </div>
+          
+            <div class="section">
+              <h2>🎨 手动配置</h2>
+              <h3 style="font-size: 14px; color: #666; margin-top: 0;">画布配置</h3>
               <div class="input-group">
                 <label>
                   画布宽度 (px):
@@ -1034,6 +1313,54 @@ export default function SpriteSheetComposer() {
                   />
                 </label>
               </div>
+              
+              <details>
+                <summary>网格填充 (可选)</summary>
+                <div class="padding-grid">
+                  <div class="padding-center">
+                    <input
+                      type="number"
+                      value={gridPaddingTop()}
+                      onInput={e => setGridPaddingTop(parseInt(e.currentTarget.value) || 0)}
+                      min="0"
+                      placeholder="上"
+                      title="上边距"
+                    />
+                  </div>
+                  <div class="padding-left">
+                    <input
+                      type="number"
+                      value={gridPaddingLeft()}
+                      onInput={e => setGridPaddingLeft(parseInt(e.currentTarget.value) || 0)}
+                      min="0"
+                      placeholder="左"
+                      title="左边距"
+                    />
+                  </div>
+                  <div class="padding-middle"></div>
+                  <div class="padding-right">
+                    <input
+                      type="number"
+                      value={gridPaddingRight()}
+                      onInput={e => setGridPaddingRight(parseInt(e.currentTarget.value) || 0)}
+                      min="0"
+                      placeholder="右"
+                      title="右边距"
+                    />
+                  </div>
+                  <div class="padding-bottom">
+                    <input
+                      type="number"
+                      value={gridPaddingBottom()}
+                      onInput={e => setGridPaddingBottom(parseInt(e.currentTarget.value) || 0)}
+                      min="0"
+                      placeholder="下"
+                      title="下边距"
+                    />
+                  </div>
+                </div>
+              </details>
+              
               <button class="btn-primary" onClick={updateGridSize}>
                 应用修改
               </button>
