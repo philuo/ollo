@@ -38,7 +38,7 @@ export default function SpriteSheetComposer() {
   const [gridGapVertical, setGridGapVertical] = createSignal(0);
   
   // 导出配置
-  const [exportFormat, setExportFormat] = createSignal<'png' | 'webp-high' | 'webp-compressed' | 'ktx2-uncompressed' | 'ktx2-etc1s' | 'ktx2-uastc'>('png');
+  const [exportFormat, setExportFormat] = createSignal<'png' | 'webp-high' | 'webp-compressed' | 'ktx2-uncompressed' | 'ktx2-etc1s' | 'ktx2-uastc'>('webp-high');
   const [exportScale, setExportScale] = createSignal(1);
   const [imageSmoothingEnabled, setImageSmoothingEnabled] = createSignal(false);
   const [ktx2Quality, setKtx2Quality] = createSignal(128);
@@ -75,7 +75,12 @@ export default function SpriteSheetComposer() {
   const [spritesheetUrl, setSpritesheetUrl] = createSignal<string | null>(null);
   const [spritesheetRows, setSpritesheetRows] = createSignal(1);
   const [spritesheetCols, setSpritesheetCols] = createSignal(1);
+  
+  // 精确的网格尺寸（用于 CSS Grid 布局，避免尺寸溢出）
+  const [exactGridWidth, setExactGridWidth] = createSignal(0);
+  const [exactGridHeight, setExactGridHeight] = createSignal(0);
 
+  
   // 创建画布和网格
   const createCanvas = () => {
     const width = canvasWidth();
@@ -119,6 +124,10 @@ export default function SpriteSheetComposer() {
     setGridCells(cells);
     setCanvasCreated(true);
     setSelectedCell({ row: 0, col: 0 }); // 默认选中第一个
+    
+    // 手动创建模式：清空精确网格尺寸（使用整数尺寸）
+    setExactGridWidth(0);
+    setExactGridHeight(0);
 
     console.log(`画布已创建: ${width}x${height}, 网格: ${gWidth}x${gHeight}, 共 ${numRows}行 x ${numCols}列`);
   };
@@ -177,24 +186,23 @@ export default function SpriteSheetComposer() {
       
       console.log(`图片加载完成: ${img.width}x${img.height}`);
       
-      // ⚠️ 关键修复：使用精确的浮点数计算网格大小
-      // 不能用 Math.floor，否则会丢失边缘像素！
+      // ⚠️ 关键：使用精确的浮点数计算网格大小
       const exactGridW = img.width / numCols;   // 例如: 512/20 = 25.6
       const exactGridH = img.height / numRows;  // 例如: 512/20 = 25.6
       
-      // 显示网格需要是整数，向上取整确保不丢失像素
-      const gridW = Math.ceil(exactGridW);      // 26
-      const gridH = Math.ceil(exactGridH);      // 26
+      // 显示网格向上取整（便于操作，CSS 会处理显示）
+      const gridW = Math.ceil(exactGridW);      // 26（仅用于显示）
+      const gridH = Math.ceil(exactGridH);      // 26（仅用于显示）
       
-      // ⚠️ 自动拆分模式：重置所有配置，使用最简单的布局
-      // 画布大小需要容纳所有网格（可能比原图稍大）
-      const canvasW = gridW * numCols;          // 26 * 20 = 520
-      const canvasH = gridH * numRows;          // 26 * 20 = 520
+      // ⚠️ 画布尺寸 = 原图尺寸（导出时保持原始大小）
+      setCanvasWidth(img.width);    // 512（原图尺寸，不变！）
+      setCanvasHeight(img.height);  // 512（原图尺寸，不变！）
+      setGridWidth(gridW);           // 26（向上取整，仅用于计算）
+      setGridHeight(gridH);          // 26（向上取整，仅用于计算）
       
-      setCanvasWidth(canvasW);
-      setCanvasHeight(canvasH);
-      setGridWidth(gridW);
-      setGridHeight(gridH);
+      // 保存精确的网格尺寸（用于 CSS Grid 布局）
+      setExactGridWidth(exactGridW);  // 25.6（精确值，CSS支持小数）
+      setExactGridHeight(exactGridH); // 25.6（精确值，CSS支持小数）
       
       // 清零所有 padding 和 gap（自动拆分不需要这些）
       setCanvasPaddingTop(0);
@@ -213,8 +221,8 @@ export default function SpriteSheetComposer() {
       setRows(numRows);
       setCanvasCreated(true);
       
-      console.log(`画布配置: 原图${img.width}x${img.height} → 画布${canvasW}x${canvasH}, 网格${gridW}x${gridH}, ${numRows}行x${numCols}列=${numRows * numCols}个切片`);
-      console.log(`精确网格尺寸: ${exactGridW.toFixed(2)}x${exactGridH.toFixed(2)} (向上取整为 ${gridW}x${gridH})`);
+      console.log(`画布配置: 原图${img.width}x${img.height}, 显示网格${gridW}x${gridH}, ${numRows}行x${numCols}列=${numRows * numCols}个切片`);
+      console.log(`精确网格尺寸: ${exactGridW.toFixed(2)}x${exactGridH.toFixed(2)} (显示为 ${gridW}x${gridH})`);
       
       // 批量切分所有图片（使用精确浮点数坐标，避免丢失像素）
       const slicePromises: Promise<{ row: number; col: number; url: string; bitmap: ImageBitmap }>[] = [];
@@ -661,9 +669,9 @@ export default function SpriteSheetComposer() {
     // 清空画布
     ctx.clearRect(0, 0, scaledWidth, scaledHeight);
 
-    // 绘制所有图片
-    const gWidth = gridWidth();
-    const gHeight = gridHeight();
+    // 绘制所有图片（优先使用 ImageBitmap 缓存，避免重复解码）
+    const gWidth = exactGridWidth() || gridWidth();  // 使用精确尺寸
+    const gHeight = exactGridHeight() || gridHeight();
     const gPaddingTop = gridPaddingTop();
     const gPaddingRight = gridPaddingRight();
     const gPaddingBottom = gridPaddingBottom();
@@ -677,28 +685,49 @@ export default function SpriteSheetComposer() {
 
     cells.forEach(cell => {
       if (cell.imageUrl) {
-        const img = new Image();
-        img.onload = () => {
-          // 计算绘制位置和尺寸（考虑padding、gap和缩放）
+        // ⚠️ 优先使用 ImageBitmap 缓存（避免重复解码，保持原始质量）
+        const cachedBitmap = imageBitmapCache.get(cell.imageUrl);
+        
+        if (cachedBitmap) {
+          // 直接使用缓存的 ImageBitmap 绘制（零损耗）
           const x = (cPaddingLeft + cell.col * (gWidth + gapH) + gPaddingLeft) * scale;
           const y = (cPaddingTop + cell.row * (gHeight + gapV) + gPaddingTop) * scale;
           const w = (gWidth - gPaddingLeft - gPaddingRight) * scale;
           const h = (gHeight - gPaddingTop - gPaddingBottom) * scale;
           
-          ctx.drawImage(img, x, y, w, h);
+          ctx.drawImage(cachedBitmap, x, y, w, h);
           loadedCount++;
 
-          // 所有图片加载完成后导出
+          // 所有图片绘制完成后导出
           if (loadedCount === totalImages) {
-            // 判断是否为 KTX2 格式
             if (format.startsWith('ktx2-')) {
               exportAsKTX2(canvasRef!, format, scale, scaledWidth, scaledHeight);
             } else {
               exportAsRaster(canvasRef!, format, scale, scaledWidth, scaledHeight);
             }
           }
-        };
-        img.src = cell.imageUrl;
+        } else {
+          // 回退：没有缓存时从 URL 加载
+          const img = new Image();
+          img.onload = () => {
+            const x = (cPaddingLeft + cell.col * (gWidth + gapH) + gPaddingLeft) * scale;
+            const y = (cPaddingTop + cell.row * (gHeight + gapV) + gPaddingTop) * scale;
+            const w = (gWidth - gPaddingLeft - gPaddingRight) * scale;
+            const h = (gHeight - gPaddingTop - gPaddingBottom) * scale;
+            
+            ctx.drawImage(img, x, y, w, h);
+            loadedCount++;
+
+            if (loadedCount === totalImages) {
+              if (format.startsWith('ktx2-')) {
+                exportAsKTX2(canvasRef!, format, scale, scaledWidth, scaledHeight);
+              } else {
+                exportAsRaster(canvasRef!, format, scale, scaledWidth, scaledHeight);
+              }
+            }
+          };
+          img.src = cell.imageUrl;
+        }
       }
     });
   };
@@ -1200,20 +1229,15 @@ export default function SpriteSheetComposer() {
             <div class="section">
               <h2>画布信息</h2>
               <div class="info-box">
-                <p>目标画布尺寸: {canvasWidth()} x {canvasHeight()}</p>
-                <p>
-                  实际画布尺寸: {
-                    cols() * gridWidth() + 
-                    (cols() - 1) * gridGapHorizontal() + 
-                    canvasPaddingLeft() + canvasPaddingRight()
-                  } x {
-                    rows() * gridHeight() + 
-                    (rows() - 1) * gridGapVertical() + 
-                    canvasPaddingTop() + canvasPaddingBottom()
-                  }
-                </p>
-                <p>网格尺寸: {gridWidth()} x {gridHeight()}</p>
-                <p>网格数量: {rows()} 行 x {cols()} 列 = {rows() * cols()} 个</p>
+                <p><strong>📥 导出尺寸:</strong> {canvasWidth()} x {canvasHeight()} 像素</p>
+                <Show when={exactGridWidth() > 0}>
+                  <p><strong>🔍 精确网格:</strong> {exactGridWidth().toFixed(2)} x {exactGridHeight().toFixed(2)} 像素</p>
+                  <p style="font-size: 11px; color: #666;">（显示为 {gridWidth()} x {gridHeight()}，CSS自动处理小数）</p>
+                </Show>
+                <Show when={exactGridWidth() === 0}>
+                  <p><strong>网格尺寸:</strong> {gridWidth()} x {gridHeight()} 像素</p>
+                </Show>
+                <p><strong>网格数量:</strong> {rows()} 行 x {cols()} 列 = {rows() * cols()} 个</p>
               </div>
               <button class="btn-secondary" onClick={resetCanvas}>
                 重新配置
@@ -1689,9 +1713,10 @@ export default function SpriteSheetComposer() {
 
               <div class="info-box" style="font-size: 12px; margin-top: 8px;">
                 <p><strong>格式说明:</strong></p>
-                <p>• PNG: 无损压缩，文件较大，保证最高质量</p>
-                <p>• WebP高质量: 接近无损，文件适中</p>
+                <p>• PNG: 无损压缩，但会重新编码（体积可能变化）</p>
+                <p>• WebP高质量: 接近无损，推荐！文件更小且质量高</p>
                 <p>• WebP压缩: 有损压缩，文件最小</p>
+                <p style="margin-top: 8px; color: #f59e0b;"><strong>⚠️ 提示:</strong> PNG 导出会重新编码，建议使用 WebP 高质量模式</p>
                 <p style="margin-top: 8px;"><strong>导出尺寸:</strong> {canvasWidth() * exportScale()}x{canvasHeight() * exportScale()}</p>
               </div>
             </div>
@@ -1713,8 +1738,8 @@ export default function SpriteSheetComposer() {
                 class="grid-overlay"
                 style={{
                   padding: `${canvasPaddingTop()}px ${canvasPaddingRight()}px ${canvasPaddingBottom()}px ${canvasPaddingLeft()}px`,
-                  'grid-template-columns': `repeat(${cols()}, ${gridWidth()}px)`,
-                  'grid-template-rows': `repeat(${rows()}, ${gridHeight()}px)`,
+                  'grid-template-columns': `repeat(${cols()}, ${exactGridWidth() || gridWidth()}px)`,
+                  'grid-template-rows': `repeat(${rows()}, ${exactGridHeight() || gridHeight()}px)`,
                   'column-gap': `${gridGapHorizontal()}px`,
                   'row-gap': `${gridGapVertical()}px`,
                 }}
