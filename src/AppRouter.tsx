@@ -3,8 +3,9 @@ import App from '@/scenes/App';
 import Dashboard from '@/scenes/Dashboard';
 import SpriteSheetComposer from '@/utils/SpriteSheetComposer';
 import { TilemapApp } from '@/tilemap';
+import { InfiniteCanvasBetter } from '@/tilemap-better';
 
-type AppMode = 'dashboard' | 'player' | 'composer' | 'tilemap';
+type AppMode = 'dashboard' | 'player' | 'composer' | 'tilemap' | 'tilemapBetter';
 
 export default function AppRouter() {
   const [mode, setMode] = createSignal<AppMode>('dashboard');
@@ -84,6 +85,9 @@ export default function AppRouter() {
           <button onClick={() => setMode('tilemap')} style={buttonStyle('tilemap')}>
             🗺️ TileMap 编辑器
           </button>
+          <button onClick={() => setMode('tilemapBetter')} style={buttonStyle('tilemapBetter')}>
+            ♾️ WebGPU 无限画布
+          </button>
         </div>
       </Show>
 
@@ -100,6 +104,11 @@ export default function AppRouter() {
         </Show>
         <Show when={mode() === 'tilemap'}>
           <TilemapApp />
+        </Show>
+        <Show when={mode() === 'tilemapBetter'}>
+          <div style={{ width: '100%', height: 'calc(100vh - 60px)' }}>
+            <InfiniteCanvasBetter />
+          </div>
         </Show>
       </div>
     </div>

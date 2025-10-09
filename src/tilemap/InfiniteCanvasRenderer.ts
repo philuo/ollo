@@ -111,38 +111,52 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4f {
     return color;  // 超出网格范围，直接返回背景色
   }
   
-  // 绘制网格线（在屏幕像素空间，确保粗细一致）
+  // 绘制网格线（使用稳定的距离判断，消除移动时的闪烁）
   if (colors.showGrid > 0u) {
-    // 计算当前像素在网格中的精确位置（世界坐标）
-    let inCellX = worldX - cellX * uniforms.gridSize.x;
-    let inCellY = worldY - cellY * uniforms.gridSize.y;
-    
-    // 转换为屏幕像素单位（考虑缩放）
-    let inCellXPixels = inCellX * zoom;
-    let inCellYPixels = inCellY * zoom;
-    let cellWidthPixels = uniforms.gridSize.x * zoom;
-    let cellHeightPixels = uniforms.gridSize.y * zoom;
-    
-    // 使用屏幕像素单位的线宽（保证至少1像素）
+    // 线宽设置（保证至少1像素）
     let lineWidthPixels = max(uniforms.gridLineWidth, 1.0);
     
-    // 判断是否在网格线上（使用屏幕像素单位）
-    // 使用完整的 lineWidthPixels 确保线条完整显示
+    // 计算当前单元格的网格线位置（世界坐标）
+    // 使用精确的网格线位置，而不是相对位置，确保连续性
+    let gridLeftX = cellX * uniforms.gridSize.x;
+    let gridRightX = (cellX + 1.0) * uniforms.gridSize.x;
+    let gridTopY = cellY * uniforms.gridSize.y;
+    let gridBottomY = (cellY + 1.0) * uniforms.gridSize.y;
     
-    // 左边线（第一列需要）
-    let onLeftEdge = cellX == 0.0 && inCellXPixels < lineWidthPixels;
+    // 计算到网格线的距离（世界坐标）
+    // 距离是连续变化的，不会在单元格边界突变
+    let distToLeft = worldX - gridLeftX;
+    let distToRight = gridRightX - worldX;
+    let distToTop = worldY - gridTopY;
+    let distToBottom = gridBottomY - worldY;
     
-    // 右边线（所有单元的右边）
-    let onRightEdge = inCellXPixels >= (cellWidthPixels - lineWidthPixels);
+    // 转换为屏幕像素单位（所有方向使用统一的缩放）
+    let distToLeftPx = distToLeft * zoom;
+    let distToRightPx = distToRight * zoom;
+    let distToTopPx = distToTop * zoom;
+    let distToBottomPx = distToBottom * zoom;
     
-    // 上边线（第一行需要）
-    let onTopEdge = cellY == 0.0 && inCellYPixels < lineWidthPixels;
+    // 稳定的判断条件：使用完整的 lineWidthPixels 确保线条完整显示
+    // 使用 < 比较，避免 >= 的边界不确定性
+    var onGridLine = false;
     
-    // 下边线（所有单元的下边）
-    let onBottomEdge = inCellYPixels >= (cellHeightPixels - lineWidthPixels);
+    // 垂直线判断（完全对称，避免闪烁）
+    if (cellX == 0.0 && distToLeftPx < lineWidthPixels) {
+      onGridLine = true;  // 第一列的左边线
+    }
+    if (distToRightPx < lineWidthPixels) {
+      onGridLine = true;  // 所有单元的右边线
+    }
     
-    // 绘制网格线
-    if (onLeftEdge || onRightEdge || onTopEdge || onBottomEdge) {
+    // 水平线判断（与垂直线使用相同逻辑）
+    if (cellY == 0.0 && distToTopPx < lineWidthPixels) {
+      onGridLine = true;  // 第一行的上边线
+    }
+    if (distToBottomPx < lineWidthPixels) {
+      onGridLine = true;  // 所有单元的下边线
+    }
+    
+    if (onGridLine) {
       color = colors.gridColor;
     }
   }

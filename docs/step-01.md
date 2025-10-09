@@ -1,4 +1,4 @@
-## 在src/tilemap实现一个基于webgpu的tilemap工具
+## 在src/tilemap-better 实现一个基于webgpu的tilemap工具
 
 ### 无限画布：
 
