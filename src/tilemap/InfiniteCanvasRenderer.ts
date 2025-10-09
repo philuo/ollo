@@ -21,6 +21,8 @@ export interface GridSettings {
   gridLineWidth: number;
   gridLineColor: string;
   showGrid: boolean;
+  gridCols: number;  // 网格列数
+  gridRows: number;  // 网格行数
 }
 
 /**
@@ -42,7 +44,9 @@ struct Colors {
   highlightColor: vec4f,
   hoveredCell: vec2i,
   showGrid: u32,
-  padding: vec3u,
+  padding: u32,
+  gridRange: vec2i,  // 网格范围 (cols, rows)
+  padding2: vec2u,
 }
 
 struct VertexInput {
@@ -79,19 +83,17 @@ fn vs_main(input: VertexInput) -> VertexOutput {
 @fragment
 fn fs_main(input: VertexOutput) -> @location(0) vec4f {
   // 从视图矩阵提取参数
-  // 视图矩阵构建: translateX = -viewTransform.x * scaleX
-  //              translateY = -viewTransform.y * scaleY
   let scaleX = uniforms.viewMatrix[0][0];
-  let scaleY = -uniforms.viewMatrix[1][1];  // 注意：矩阵中存的是 -scaleY
+  let scaleY = -uniforms.viewMatrix[1][1];
   let translateX = uniforms.viewMatrix[2][0];
   let translateY = uniforms.viewMatrix[2][1];
   
   // 反推原始参数
   let zoom = scaleX / (2.0 / uniforms.canvasSize.x);
-  let viewX = -translateX / scaleX;  // viewTransform.x
-  let viewY = -translateY / scaleY;  // viewTransform.y
+  let viewX = -translateX / scaleX;
+  let viewY = -translateY / scaleY;
   
-  // 屏幕坐标转世界坐标（与 screenToGrid 函数完全一致）
+  // 屏幕坐标转世界坐标
   let worldX = (input.worldPos.x - uniforms.canvasSize.x * 0.5) / zoom + viewX;
   let worldY = (input.worldPos.y - uniforms.canvasSize.y * 0.5) / zoom + viewY;
   
@@ -99,16 +101,48 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4f {
   let cellX = floor(worldX / uniforms.gridSize.x);
   let cellY = floor(worldY / uniforms.gridSize.y);
   
-  // 单元内的相对位置
-  let inCellX = worldX - cellX * uniforms.gridSize.x;
-  let inCellY = worldY - cellY * uniforms.gridSize.y;
-  
   var color = colors.backgroundColor;
   
-  // 绘制网格线
+  // 检查是否在网格范围内
+  let inGridRange = cellX >= 0 && cellX < f32(colors.gridRange.x) && 
+                    cellY >= 0 && cellY < f32(colors.gridRange.y);
+  
+  if (!inGridRange) {
+    return color;  // 超出网格范围，直接返回背景色
+  }
+  
+  // 绘制网格线（在屏幕像素空间，确保粗细一致）
   if (colors.showGrid > 0u) {
-    let lineWidth = uniforms.gridLineWidth / zoom;
-    if (inCellX < lineWidth || inCellY < lineWidth) {
+    // 计算当前像素在网格中的精确位置（世界坐标）
+    let inCellX = worldX - cellX * uniforms.gridSize.x;
+    let inCellY = worldY - cellY * uniforms.gridSize.y;
+    
+    // 转换为屏幕像素单位（考虑缩放）
+    let inCellXPixels = inCellX * zoom;
+    let inCellYPixels = inCellY * zoom;
+    let cellWidthPixels = uniforms.gridSize.x * zoom;
+    let cellHeightPixels = uniforms.gridSize.y * zoom;
+    
+    // 使用屏幕像素单位的线宽（保证至少1像素）
+    let lineWidthPixels = max(uniforms.gridLineWidth, 1.0);
+    
+    // 判断是否在网格线上（使用屏幕像素单位）
+    // 使用完整的 lineWidthPixels 确保线条完整显示
+    
+    // 左边线（第一列需要）
+    let onLeftEdge = cellX == 0.0 && inCellXPixels < lineWidthPixels;
+    
+    // 右边线（所有单元的右边）
+    let onRightEdge = inCellXPixels >= (cellWidthPixels - lineWidthPixels);
+    
+    // 上边线（第一行需要）
+    let onTopEdge = cellY == 0.0 && inCellYPixels < lineWidthPixels;
+    
+    // 下边线（所有单元的下边）
+    let onBottomEdge = inCellYPixels >= (cellHeightPixels - lineWidthPixels);
+    
+    // 绘制网格线
+    if (onLeftEdge || onRightEdge || onTopEdge || onBottomEdge) {
       color = colors.gridColor;
     }
   }
@@ -137,13 +171,15 @@ export class InfiniteCanvasRenderer {
   private bindGroup!: GPUBindGroup;
   private vertexBuffer!: GPUBuffer;
 
-  private viewTransform: ViewTransform = { x: 0, y: 0, zoom: 1.0 };
+  private viewTransform: ViewTransform = { x: 0, y: 0, zoom: 0.5 };
   private gridSettings: GridSettings = {
-    cellWidth: 32,
-    cellHeight: 32,
+    cellWidth: 64,
+    cellHeight: 64,
     gridLineWidth: 1,
     gridLineColor: '#ffffff80',
     showGrid: true,
+    gridCols: 64,
+    gridRows: 64,
   };
   private backgroundColor: string = '#000000';
   private hoveredCell: { x: number; y: number } | null = null;
@@ -195,7 +231,7 @@ export class InfiniteCanvasRenderer {
 
     // 创建颜色缓冲区
     this.colorBuffer = this.device.createBuffer({
-      size: 80, // vec4(16) + vec4(16) + vec4(16) + vec2i(8) + u32(4) + padding(20) = 80
+      size: 96, // vec4(16) + vec4(16) + vec4(16) + vec2i(8) + u32(4) + padding(4) + vec2i(8) + padding(24) = 96
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
@@ -256,6 +292,10 @@ export class InfiniteCanvasRenderer {
       ],
     });
 
+    // 初始化 uniform 和 color 数据
+    this.updateUniforms();
+    this.updateColors();
+
     console.log('无限画布渲染器初始化成功');
   }
 
@@ -299,13 +339,11 @@ export class InfiniteCanvasRenderer {
     const commandEncoder = this.device.createCommandEncoder();
     const textureView = this.context.getCurrentTexture().createView();
 
-    // 使用透明清除色，让背景色完全由着色器控制
-    // 这样当背景设置为透明时，可以透过Canvas看到下面的棋盘格CSS背景
     const renderPass = commandEncoder.beginRenderPass({
       colorAttachments: [
         {
           view: textureView,
-          clearValue: { r: 0, g: 0, b: 0, a: 0 },  // 透明清除
+          clearValue: { r: 0, g: 0, b: 0, a: 1.0 },
           loadOp: 'clear',
           storeOp: 'store',
         },
@@ -371,12 +409,12 @@ export class InfiniteCanvasRenderer {
     const hoveredX = this.hoveredCell?.x ?? -999999;
     const hoveredY = this.hoveredCell?.y ?? -999999;
 
-    const colorData = new Float32Array(20); // 80 bytes / 4 = 20 floats
+    const colorData = new Float32Array(24); // 96 bytes / 4 = 24 floats
     colorData.set(bgColor, 0); // 4 floats
     colorData.set(gridColor, 4); // 4 floats
     colorData.set(highlightColor, 8); // 4 floats
 
-    // hoveredCell (vec2i) 需要转换为 float 后再传入
+    // hoveredCell (vec2i)
     const hoveredCellData = new Int32Array([hoveredX, hoveredY]);
     const hoveredCellFloat = new Float32Array(hoveredCellData.buffer);
     colorData.set(hoveredCellFloat, 12); // 2 floats (实际是 2 ints)
@@ -385,7 +423,13 @@ export class InfiniteCanvasRenderer {
     const showGridData = new Uint32Array([this.gridSettings.showGrid ? 1 : 0]);
     const showGridFloat = new Float32Array(showGridData.buffer);
     colorData.set(showGridFloat, 14); // 1 float (实际是 1 uint)
-    // padding: 15-19
+    // padding: 15
+
+    // gridRange (vec2i)
+    const gridRangeData = new Int32Array([this.gridSettings.gridCols, this.gridSettings.gridRows]);
+    const gridRangeFloat = new Float32Array(gridRangeData.buffer);
+    colorData.set(gridRangeFloat, 16); // 2 floats (实际是 2 ints)
+    // padding: 18-23
 
     this.device.queue.writeBuffer(this.colorBuffer, 0, colorData);
   }
@@ -420,9 +464,9 @@ export class InfiniteCanvasRenderer {
   }
 
   /**
-   * 屏幕坐标转网格坐标
+   * 屏幕坐标转世界坐标
    */
-  screenToGrid(screenX: number, screenY: number): { x: number; y: number } {
+  screenToWorld(screenX: number, screenY: number): { x: number; y: number } {
     // Canvas 内部分辨率
     const canvasWidth = this.canvas.width;
     const canvasHeight = this.canvas.height;
@@ -443,9 +487,17 @@ export class InfiniteCanvasRenderer {
     const worldX = (canvasX - canvasWidth / 2) / zoom + this.viewTransform.x;
     const worldY = (canvasY - canvasHeight / 2) / zoom + this.viewTransform.y;
 
+    return { x: worldX, y: worldY };
+  }
+
+  /**
+   * 屏幕坐标转网格坐标
+   */
+  screenToGrid(screenX: number, screenY: number): { x: number; y: number } {
+    const world = this.screenToWorld(screenX, screenY);
     return {
-      x: Math.floor(worldX / this.gridSettings.cellWidth),
-      y: Math.floor(worldY / this.gridSettings.cellHeight),
+      x: Math.floor(world.x / this.gridSettings.cellWidth),
+      y: Math.floor(world.y / this.gridSettings.cellHeight),
     };
   }
 

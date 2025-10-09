@@ -14,24 +14,44 @@ export function InfiniteCanvas() {
   // Renderer
   let renderer: InfiniteCanvasRenderer | undefined;
 
-  // 视图变换状态
-  const [viewTransform, setViewTransform] = createSignal({ x: 0, y: 0, zoom: 1.0 });
+  // 网格范围设置（有限网格）
+  const GRID_COLS = 64;
+  const GRID_ROWS = 64;
+  
+  // 视图变换状态 - 默认50%缩放，居中显示网格
+  const [viewTransform, setViewTransform] = createSignal({ 
+    x: (GRID_COLS * 64) / 2,  // 网格中心X
+    y: (GRID_ROWS * 64) / 2,  // 网格中心Y
+    zoom: 0.5  // 默认50%缩放
+  });
   const [isPanning, setIsPanning] = createSignal(false);
   const [lastMousePos, setLastMousePos] = createSignal({ x: 0, y: 0 });
   const [hoveredCell, setHoveredCell] = createSignal<{ x: number; y: number } | null>(null);
 
-  // 网格设置
+  // 网格设置 - 默认64x64大小
   const [gridSettings, setGridSettings] = createSignal({
-    cellWidth: 32,
-    cellHeight: 32,
+    cellWidth: 64,
+    cellHeight: 64,
     gridLineWidth: 1,
     gridLineColor: '#ffffff80',
     showGrid: true,
+    gridCols: GRID_COLS,
+    gridRows: GRID_ROWS,
+  });
+
+  // 计算网格中心位置
+  const getGridCenter = () => ({
+    x: (gridSettings().gridCols * gridSettings().cellWidth) / 2,
+    y: (gridSettings().gridRows * gridSettings().cellHeight) / 2,
   });
 
   // 背景设置
   const [backgroundColor, setBackgroundColor] = createSignal('#000000'); // 默认纯黑
   const [showColorPicker, setShowColorPicker] = createSignal(false);
+
+  // 双击j键检测
+  let lastJKeyTime = 0;
+  const J_KEY_DOUBLE_CLICK_THRESHOLD = 300; // 300ms内双击
 
   /**
    * 初始化 WebGPU
@@ -132,13 +152,41 @@ export function InfiniteCanvas() {
 
   const handleCanvasWheel = (event: WheelEvent) => {
     event.preventDefault();
+    if (!canvasRef || !renderer) return;
+
+    const rect = canvasRef.getBoundingClientRect();
+    const mouseX = event.clientX - rect.left;
+    const mouseY = event.clientY - rect.top;
+
+    // 获取鼠标在世界坐标中的位置（缩放前）
+    const worldPosBefore = renderer.screenToWorld(mouseX, mouseY);
+
     const vt = viewTransform();
     const zoomFactor = event.deltaY > 0 ? 0.9 : 1.1;
-    const newZoom = Math.max(0.1, Math.min(5.0, vt.zoom * zoomFactor));
-    setViewTransform({ ...vt, zoom: newZoom });
+    const newZoom = Math.max(0.2, Math.min(4.0, vt.zoom * zoomFactor)); // 20%-400%
 
+    // 更新缩放
+    setViewTransform({ ...vt, zoom: newZoom });
     if (renderer) {
       renderer.setViewTransform(viewTransform());
+    }
+
+    // 获取鼠标在世界坐标中的位置（缩放后）
+    const worldPosAfter = renderer.screenToWorld(mouseX, mouseY);
+
+    // 调整视图位置，使鼠标指向的世界坐标保持不变
+    const dx = worldPosAfter.x - worldPosBefore.x;
+    const dy = worldPosAfter.y - worldPosBefore.y;
+    
+    const finalTransform = {
+      x: vt.x - dx,
+      y: vt.y - dy,
+      zoom: newZoom,
+    };
+    
+    setViewTransform(finalTransform);
+    if (renderer) {
+      renderer.setViewTransform(finalTransform);
     }
   };
 
@@ -163,12 +211,47 @@ export function InfiniteCanvas() {
     }
   };
 
+  /**
+   * 重置视图到网格居中
+   */
+  const resetViewToCenter = () => {
+    const center = getGridCenter();
+    const newTransform = {
+      x: center.x,
+      y: center.y,
+      zoom: 0.5, // 重置到默认50%缩放
+    };
+    setViewTransform(newTransform);
+    if (renderer) {
+      renderer.setViewTransform(newTransform);
+    }
+  };
+
+  /**
+   * 键盘事件处理
+   */
+  const handleKeyDown = (event: KeyboardEvent) => {
+    if (event.key === 'j' || event.key === 'J') {
+      const now = Date.now();
+      if (now - lastJKeyTime < J_KEY_DOUBLE_CLICK_THRESHOLD) {
+        // 双击j键，回到居中
+        resetViewToCenter();
+        lastJKeyTime = 0; // 重置
+      } else {
+        lastJKeyTime = now;
+      }
+    }
+  };
+
   // 初始化
   onMount(async () => {
     const success = await initWebGPU();
     if (success) {
       renderLoop();
     }
+    
+    // 添加键盘事件监听
+    window.addEventListener('keydown', handleKeyDown);
   });
 
   // 清理
@@ -176,6 +259,8 @@ export function InfiniteCanvas() {
     if (renderer) {
       renderer.destroy();
     }
+    // 移除键盘事件监听
+    window.removeEventListener('keydown', handleKeyDown);
   });
 
   return (
@@ -231,23 +316,43 @@ export function InfiniteCanvas() {
               显示网格
             </label>
             <label>
-              列宽度:
+              网格列数:
               <input
                 type="number"
-                value={gridSettings().cellWidth}
-                onChange={(e) => updateGridSettings({ cellWidth: parseInt(e.currentTarget.value) || 32 })}
-                min="8"
-                max="256"
+                value={gridSettings().gridCols}
+                onChange={(e) => updateGridSettings({ gridCols: parseInt(e.currentTarget.value) || 512 })}
+                min="16"
+                max="1024"
               />
             </label>
             <label>
-              行高度:
+              网格行数:
+              <input
+                type="number"
+                value={gridSettings().gridRows}
+                onChange={(e) => updateGridSettings({ gridRows: parseInt(e.currentTarget.value) || 512 })}
+                min="16"
+                max="1024"
+              />
+            </label>
+            <label>
+              单元宽度:
+              <input
+                type="number"
+                value={gridSettings().cellWidth}
+                onChange={(e) => updateGridSettings({ cellWidth: parseInt(e.currentTarget.value) || 64 })}
+                min="16"
+                max="128"
+              />
+            </label>
+            <label>
+              单元高度:
               <input
                 type="number"
                 value={gridSettings().cellHeight}
-                onChange={(e) => updateGridSettings({ cellHeight: parseInt(e.currentTarget.value) || 32 })}
-                min="8"
-                max="256"
+                onChange={(e) => updateGridSettings({ cellHeight: parseInt(e.currentTarget.value) || 64 })}
+                min="16"
+                max="128"
               />
             </label>
             <label>
@@ -275,9 +380,11 @@ export function InfiniteCanvas() {
         <div class="toolbar-section">
           <h3>信息</h3>
           <div class="info-display">
+            <div>网格: {gridSettings().gridCols} × {gridSettings().gridRows}</div>
+            <div>单元: {gridSettings().cellWidth} × {gridSettings().cellHeight}px</div>
             <div>缩放: {(viewTransform().zoom * 100).toFixed(0)}%</div>
-            <div>视图: ({viewTransform().x.toFixed(0)}, {viewTransform().y.toFixed(0)})</div>
-            {hoveredCell() && (
+            {hoveredCell() && hoveredCell()!.x >= 0 && hoveredCell()!.x < gridSettings().gridCols &&
+             hoveredCell()!.y >= 0 && hoveredCell()!.y < gridSettings().gridRows && (
               <div>网格: ({hoveredCell()!.x}, {hoveredCell()!.y})</div>
             )}
           </div>
@@ -305,10 +412,11 @@ export function InfiniteCanvas() {
       <div class="controls-hint">
         <h4>操作说明</h4>
         <ul>
-          <li>滚轮: 缩放 (10% ~ 500%)</li>
+          <li>滚轮: 以鼠标为中心缩放 (20% ~ 400%)</li>
           <li>Alt + 左键拖动: 平移视图</li>
           <li>中键拖动: 平移视图</li>
           <li>鼠标悬停: 高亮网格</li>
+          <li>双击 J 键: 回到网格居中</li>
         </ul>
       </div>
     </div>
