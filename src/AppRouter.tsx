@@ -2,10 +2,9 @@ import { createSignal, Show } from 'solid-js';
 import App from '@/scenes/App';
 import Dashboard from '@/scenes/Dashboard';
 import SpriteSheetComposer from '@/utils/SpriteSheetComposer';
-import { TilemapApp } from '@/bak';
-import { InfiniteCanvasBetter } from '@/tilemap-better';
+import { InfiniteCanvas } from '@/tilemap';
 
-type AppMode = 'dashboard' | 'player' | 'composer' | 'tilemap' | 'tilemapBetter';
+type AppMode = 'dashboard' | 'player' | 'composer' | 'tilemap';
 
 export default function AppRouter() {
   const [mode, setMode] = createSignal<AppMode>('dashboard');
@@ -83,16 +82,13 @@ export default function AppRouter() {
             🎨 雪碧图合成
           </button>
           <button onClick={() => setMode('tilemap')} style={buttonStyle('tilemap')}>
-            🗺️ TileMap 编辑器
-          </button>
-          <button onClick={() => setMode('tilemapBetter')} style={buttonStyle('tilemapBetter')}>
-            ♾️ WebGPU 无限画布
+            ♾️ 无限画布
           </button>
         </div>
       </Show>
 
       {/* 内容区域 */}
-      <div style={{ 'margin-top': mode() !== 'dashboard' ? '60px' : '0' }}>
+      <div style={{ 'padding-top': mode() !== 'dashboard' ? '60px' : '0' }}>
         <Show when={mode() === 'dashboard'}>
           <Dashboard onSelectMode={setMode} />
         </Show>
@@ -103,11 +99,8 @@ export default function AppRouter() {
           <SpriteSheetComposer />
         </Show>
         <Show when={mode() === 'tilemap'}>
-          <TilemapApp />
-        </Show>
-        <Show when={mode() === 'tilemapBetter'}>
           <div style={{ width: '100%', height: 'calc(100vh - 60px)' }}>
-            <InfiniteCanvasBetter />
+            <InfiniteCanvas />
           </div>
         </Show>
       </div>

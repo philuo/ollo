@@ -7,7 +7,7 @@ export class Renderer {
   private device!: GPUDevice;
   private context!: GPUCanvasContext;
   private format!: GPUTextureFormat;
-  
+
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
   }
@@ -147,4 +147,3 @@ export class Renderer {
     });
   }
 }
-
