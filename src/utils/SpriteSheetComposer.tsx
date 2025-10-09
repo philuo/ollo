@@ -1005,8 +1005,6 @@ export default function SpriteSheetComposer() {
 
   return (
     <div class="sprite-composer-container">
-      <h1>🎨 雪碧图合成工具</h1>
-
       <div class="composer-content">
         {/* 左侧配置面板 */}
         <div class="config-panel">

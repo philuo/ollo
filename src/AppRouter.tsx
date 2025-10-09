@@ -82,7 +82,7 @@ export default function AppRouter() {
             🎨 雪碧图合成
           </button>
           <button onClick={() => setMode('tilemap')} style={buttonStyle('tilemap')}>
-            ♾️ 无限画布
+            🗺️ TileMap 编辑器
           </button>
         </div>
       </Show>
