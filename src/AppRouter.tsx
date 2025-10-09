@@ -2,7 +2,7 @@ import { createSignal, Show } from 'solid-js';
 import App from '@/scenes/App';
 import Dashboard from '@/scenes/Dashboard';
 import SpriteSheetComposer from '@/utils/SpriteSheetComposer';
-import { TileMapEditor } from '@/map';
+import { TilemapApp } from '@/tilemap';
 
 type AppMode = 'dashboard' | 'player' | 'composer' | 'tilemap';
 
@@ -16,13 +16,13 @@ export default function AppRouter() {
     'font-weight': '600',
     'font-size': '14px',
     cursor: 'pointer',
-    background: mode() === currentMode 
-      ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' 
+    background: mode() === currentMode
+      ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
       : 'rgba(255, 255, 255, 0.1)',
     color: 'white',
     transition: 'all 0.3s ease',
-    'box-shadow': mode() === currentMode 
-      ? '0 4px 15px rgba(102, 126, 234, 0.4)' 
+    'box-shadow': mode() === currentMode
+      ? '0 4px 15px rgba(102, 126, 234, 0.4)'
       : 'none',
     transform: mode() === currentMode ? 'translateY(-2px)' : 'none',
   });
@@ -99,10 +99,9 @@ export default function AppRouter() {
           <SpriteSheetComposer />
         </Show>
         <Show when={mode() === 'tilemap'}>
-          <TileMapEditor />
+          <TilemapApp />
         </Show>
       </div>
     </div>
   );
 }
-
