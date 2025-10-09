@@ -91,12 +91,15 @@ let worldY = (input.worldPos.y - uniforms.canvasSize.y * 0.5) / zoom + viewY;
 选择透明背景预设后，画布显示为纯黑色，而不是期望的棋盘格透明效果。
 
 **根本原因**：
-WebGPU Canvas 配置了透明模式（`alphaMode: 'premultiplied'`），但由于没有背景元素，透明区域显示为黑色。
+1. WebGPU Canvas 配置了透明模式（`alphaMode: 'premultiplied'`），但没有透明背景支撑
+2. WebGPU 的 `clearValue` 使用了不透明黑色 `{ r: 0, g: 0, b: 0, a: 1.0 }`
+3. 即使着色器输出透明色，渲染通道的清除色也会覆盖为黑色
 
 **修复方案**：
-在 Canvas 元素后面添加一个 CSS 棋盘格背景层：
 
-**HTML 结构**：
+**步骤 1：添加 CSS 棋盘格背景层**
+
+HTML 结构：
 ```tsx
 <div class="canvas-wrapper">
   <div class="canvas-background" />  {/* 新增棋盘格背景 */}
@@ -104,7 +107,7 @@ WebGPU Canvas 配置了透明模式（`alphaMode: 'premultiplied'`），但由�
 </div>
 ```
 
-**CSS 样式**：
+CSS 样式：
 ```css
 .canvas-background {
   position: absolute;
@@ -125,6 +128,21 @@ WebGPU Canvas 配置了透明模式（`alphaMode: 'premultiplied'`），但由�
   z-index: 1;  /* Canvas 在棋盘格上方 */
 }
 ```
+
+**步骤 2：修改 WebGPU 清除颜色为透明**
+
+```typescript
+const renderPass = commandEncoder.beginRenderPass({
+  colorAttachments: [{
+    view: textureView,
+    clearValue: { r: 0, g: 0, b: 0, a: 0 },  // 改为透明清除
+    loadOp: 'clear',
+    storeOp: 'store',
+  }],
+});
+```
+
+这样当着色器输出透明背景色时，就能透过 Canvas 看到下面的棋盘格 CSS 背景。
 
 **验证方法**：
 1. 启动应用并进入无限画布

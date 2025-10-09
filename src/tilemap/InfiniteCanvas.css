@@ -72,15 +72,6 @@
   background-color: #fff;
 }
 
-.color-btn.transparent {
-  background: 
-    linear-gradient(45deg, #ccc 25%, transparent 25%),
-    linear-gradient(-45deg, #ccc 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, #ccc 75%),
-    linear-gradient(-45deg, transparent 75%, #ccc 75%);
-  background-size: 8px 8px;
-  background-position: 0 0, 0 4px, 4px -4px, -4px 0px;
-}
 
 .custom-color-wrapper {
   position: relative;
@@ -164,28 +155,11 @@
   background: #0f0f0f;
 }
 
-/* 棋盘格背景 */
-.canvas-background {
-  position: absolute;
-  width: 1920px;
-  height: 1080px;
-  background-image: 
-    linear-gradient(45deg, #808080 25%, transparent 25%),
-    linear-gradient(-45deg, #808080 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, #808080 75%),
-    linear-gradient(-45deg, transparent 75%, #808080 75%);
-  background-size: 20px 20px;
-  background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
-  background-color: #404040;
-}
-
 .canvas-wrapper canvas {
   display: block;
   max-width: 100%;
   max-height: 100%;
   box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
-  position: relative;
-  z-index: 1;
 }
 
 /* 操作提示 */

@@ -299,11 +299,13 @@ export class InfiniteCanvasRenderer {
     const commandEncoder = this.device.createCommandEncoder();
     const textureView = this.context.getCurrentTexture().createView();
 
+    // 使用透明清除色，让背景色完全由着色器控制
+    // 这样当背景设置为透明时，可以透过Canvas看到下面的棋盘格CSS背景
     const renderPass = commandEncoder.beginRenderPass({
       colorAttachments: [
         {
           view: textureView,
-          clearValue: { r: 0, g: 0, b: 0, a: 1.0 },
+          clearValue: { r: 0, g: 0, b: 0, a: 0 },  // 透明清除
           loadOp: 'clear',
           storeOp: 'store',
         },

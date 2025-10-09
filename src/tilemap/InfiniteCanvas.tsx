@@ -195,11 +195,6 @@ export function InfiniteCanvas() {
               title="纯白"
               onClick={() => setPresetBackground('#ffffff')}
             />
-            <button
-              class="color-btn transparent"
-              title="透明"
-              onClick={() => setPresetBackground('#00000000')}
-            />
             <div class="custom-color-wrapper">
               <button
                 class="color-btn custom"
@@ -291,7 +286,6 @@ export function InfiniteCanvas() {
 
       {/* 画布 */}
       <div class="canvas-wrapper">
-        <div class="canvas-background" />
         <canvas
           ref={canvasRef}
           width={1920}
