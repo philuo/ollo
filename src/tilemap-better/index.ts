@@ -1,2 +1,7 @@
-export { default as InfiniteCanvasBetter } from './InfiniteCanvasBetter';
+/**
+ * Better Tilemap (Infinite Canvas) exports
+ */
+
+export { InfiniteCanvasBetter } from './InfiniteCanvasBetter';
+
 

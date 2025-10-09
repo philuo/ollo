@@ -2,7 +2,7 @@ import { createSignal, Show } from 'solid-js';
 import App from '@/scenes/App';
 import Dashboard from '@/scenes/Dashboard';
 import SpriteSheetComposer from '@/utils/SpriteSheetComposer';
-import { TilemapApp } from '@/tilemap';
+import { TilemapApp } from '@/bak';
 import { InfiniteCanvasBetter } from '@/tilemap-better';
 
 type AppMode = 'dashboard' | 'player' | 'composer' | 'tilemap' | 'tilemapBetter';

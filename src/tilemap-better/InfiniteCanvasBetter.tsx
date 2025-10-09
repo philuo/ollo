@@ -1,221 +1,315 @@
-import { onCleanup, onMount, createSignal } from 'solid-js';
-import { InfiniteCanvasRenderer, type GridSettings, type ViewTransform } from '@/tilemap/InfiniteCanvasRenderer';
+import { createSignal, onCleanup, onMount } from 'solid-js';
+import { Renderer } from '@/scenes/webgpu/Renderer';
 
-export default function InfiniteCanvasBetter() {
-  let canvasRef: HTMLCanvasElement | undefined;
-  let renderer: InfiniteCanvasRenderer | undefined;
+type GridConfig = {
+  cols: number;
+  rows: number;
+  cellWidth: number;  // 单个网格的宽度（像素）
+  cellHeight: number; // 单个网格的高度（像素）
+  lineWidth: number;
+  lineColor: string; // rgba()
+};
 
-  const [background, setBackground] = createSignal<string>('#000000');
-  const [gridCols, setGridCols] = createSignal<number>(64);
-  const [gridRows, setGridRows] = createSignal<number>(64);
-  const [gridLineWidth, setGridLineWidth] = createSignal<number>(1);
-  const [gridLineColor, setGridLineColor] = createSignal<string>('#ffffff80');
-  const [zoom, setZoom] = createSignal<number>(100);
+type BgPreset = 'black' | 'white' | 'transparent' | 'custom';
 
-  const clampZoom = (z: number) => Math.min(500, Math.max(10, z));
+export function InfiniteCanvasBetter() {
+  let webgpuCanvasRef: HTMLCanvasElement | undefined;
+  let overlayCanvasRef: HTMLCanvasElement | undefined;
 
-  let device: GPUDevice | undefined;
-  let context: GPUCanvasContext | undefined;
-  let format: GPUTextureFormat | undefined;
+  const [bgPreset, setBgPreset] = createSignal<BgPreset>('black');
+  const [customBg, setCustomBg] = createSignal<string>('#1e1e2e');
+  const [grid, setGrid] = createSignal<GridConfig>({ 
+    cols: 32, 
+    rows: 18, 
+    cellWidth: 32, 
+    cellHeight: 32, 
+    lineWidth: 1, 
+    lineColor: 'rgba(255,255,255,0.15)' 
+  });
+  const [view, setView] = createSignal({ x: 0, y: 0, zoom: 1 });
+  const [hoverCell, setHoverCell] = createSignal<{ c: number; r: number } | null>(null);
+  const [isPanning, setIsPanning] = createSignal(false);
+  const [lastMouse, setLastMouse] = createSignal({ x: 0, y: 0 });
+  const [spaceDown, setSpaceDown] = createSignal(false);
 
-  let view: ViewTransform = { x: 0, y: 0, zoom: 1 };
-  let isPanning = false;
-  let panStart = { x: 0, y: 0 };
-  let viewStart = { x: 0, y: 0 };
+  let renderer: Renderer | null = null;
 
-  const resizeCanvas = () => {
-    const canvas = canvasRef!;
-    const dpr = Math.max(1, window.devicePixelRatio || 1);
-    const rect = canvas.getBoundingClientRect();
-    const needResize = canvas.width !== Math.floor(rect.width * dpr) || canvas.height !== Math.floor(rect.height * dpr);
-    if (needResize) {
-      canvas.width = Math.floor(rect.width * dpr);
-      canvas.height = Math.floor(rect.height * dpr);
+  const resize = () => {
+    if (!webgpuCanvasRef || !overlayCanvasRef) return;
+    const rect = webgpuCanvasRef.getBoundingClientRect();
+    webgpuCanvasRef.width = Math.floor(rect.width);
+    webgpuCanvasRef.height = Math.floor(rect.height);
+    overlayCanvasRef.width = webgpuCanvasRef.width;
+    overlayCanvasRef.height = webgpuCanvasRef.height;
+    drawOverlay();
+  };
+
+  const clearBackground = () => {
+    if (!renderer) return;
+    const preset = bgPreset();
+    if (preset === 'black') renderer.clear(0, 0, 0, 1);
+    else if (preset === 'white') renderer.clear(1, 1, 1, 1);
+    else if (preset === 'transparent') renderer.clear(0, 0, 0, 0);
+    else {
+      const hex = customBg().replace('#', '');
+      const r = parseInt(hex.slice(0, 2), 16) / 255;
+      const g = parseInt(hex.slice(2, 4), 16) / 255;
+      const b = parseInt(hex.slice(4, 6), 16) / 255;
+      renderer.clear(r, g, b, 1);
     }
   };
 
-  const render = () => {
-    if (!renderer) return;
-    renderer.render();
+  const drawOverlay = () => {
+    if (!overlayCanvasRef) return;
+    const ctx = overlayCanvasRef.getContext('2d');
+    if (!ctx) return;
+
+    ctx.clearRect(0, 0, overlayCanvasRef.width, overlayCanvasRef.height);
+
+    const w = overlayCanvasRef.width;
+    const h = overlayCanvasRef.height;
+    const { cols, rows, cellWidth, cellHeight, lineWidth, lineColor } = grid();
+    const vt = view();
+
+    // 缩放后的网格单元尺寸
+    const cellW = cellWidth * vt.zoom;
+    const cellH = cellHeight * vt.zoom;
+    
+    // 网格偏移（画布中心为参考点）
+    const offsetX = w / 2 - vt.x * cellW;
+    const offsetY = h / 2 - vt.y * cellH;
+
+    ctx.save();
+    ctx.lineWidth = lineWidth;
+    ctx.strokeStyle = lineColor;
+
+    // 绘制网格线（只绘制设定的行列数）
+    // 绘制竖线 (cols + 1 条线)
+    for (let c = 0; c <= cols; c++) {
+      const x = offsetX + c * cellW;
+      ctx.beginPath();
+      ctx.moveTo(x, offsetY);
+      ctx.lineTo(x, offsetY + rows * cellH);
+      ctx.stroke();
+    }
+
+    // 绘制横线 (rows + 1 条线)
+    for (let r = 0; r <= rows; r++) {
+      const y = offsetY + r * cellH;
+      ctx.beginPath();
+      ctx.moveTo(offsetX, y);
+      ctx.lineTo(offsetX + cols * cellW, y);
+      ctx.stroke();
+    }
+
+    // 悬浮高亮
+    if (hoverCell()) {
+      const { c, r } = hoverCell()!;
+      // 只高亮在网格范围内的单元格
+      if (c >= 0 && c < cols && r >= 0 && r < rows) {
+        const x = offsetX + c * cellW;
+        const y = offsetY + r * cellH;
+        ctx.fillStyle = 'rgba(102,126,234,0.25)';
+        ctx.strokeStyle = 'rgba(102,126,234,0.9)';
+        ctx.lineWidth = Math.max(1, lineWidth);
+        ctx.fillRect(x, y, cellW, cellH);
+        ctx.strokeRect(x, y, cellW, cellH);
+      }
+    }
+
+    ctx.restore();
   };
 
-  const updateGrid = () => {
-    if (!renderer) return;
-    const settings: GridSettings = {
-      cellWidth: 64,
-      cellHeight: 64,
-      gridLineWidth: gridLineWidth(),
-      gridLineColor: gridLineColor(),
-      showGrid: true,
-      gridCols: gridCols(),
-      gridRows: gridRows(),
-    };
-    renderer.setGridSettings(settings);
-    renderer.setBackgroundColor(background());
-    render();
+  const toCell = (clientX: number, clientY: number) => {
+    if (!overlayCanvasRef) return null;
+    const rect = overlayCanvasRef.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+    const { cellWidth, cellHeight } = grid();
+    const w = overlayCanvasRef.width;
+    const h = overlayCanvasRef.height;
+    const vt = view();
+    
+    const cellW = cellWidth * vt.zoom;
+    const cellH = cellHeight * vt.zoom;
+    const offsetX = w / 2 - vt.x * cellW;
+    const offsetY = h / 2 - vt.y * cellH;
+    
+    const c = Math.floor((x - offsetX) / cellW);
+    const r = Math.floor((y - offsetY) / cellH);
+    return { c, r };
   };
 
-  const updateView = () => {
-    if (!renderer) return;
-    renderer.setViewTransform(view);
-    render();
+  const onMouseMove = (e: MouseEvent) => {
+    if (isPanning()) {
+      const dx = e.clientX - lastMouse().x;
+      const dy = e.clientY - lastMouse().y;
+      const vt = view();
+      const { cellWidth, cellHeight } = grid();
+      const cellW = cellWidth * vt.zoom;
+      const cellH = cellHeight * vt.zoom;
+      setView({ x: vt.x - dx / cellW, y: vt.y - dy / cellH, zoom: vt.zoom });
+      setLastMouse({ x: e.clientX, y: e.clientY });
+      drawOverlay();
+      return;
+    }
+    const cell = toCell(e.clientX, e.clientY);
+    setHoverCell(cell);
+    drawOverlay();
+  };
+
+  const onMouseDown = (e: MouseEvent) => {
+    if (e.button === 1 || (e.button === 0 && spaceDown())) {
+      setIsPanning(true);
+      setLastMouse({ x: e.clientX, y: e.clientY });
+    }
+  };
+
+  const onMouseUp = () => {
+    setIsPanning(false);
+  };
+
+  const onWheel = (e: WheelEvent) => {
+    e.preventDefault();
+    if (!overlayCanvasRef) return;
+    const rect = overlayCanvasRef.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    const vt = view();
+    const prevZoom = vt.zoom;
+    const factor = e.deltaY > 0 ? 0.9 : 1.1;
+    const newZoom = Math.max(0.1, Math.min(5.0, prevZoom * factor));
+
+    const w = overlayCanvasRef.width;
+    const h = overlayCanvasRef.height;
+    const { cellWidth, cellHeight } = grid();
+    
+    const cellWPrev = cellWidth * prevZoom;
+    const cellHPrev = cellHeight * prevZoom;
+    const cellWNew = cellWidth * newZoom;
+    const cellHNew = cellHeight * newZoom;
+
+    // 缩放前鼠标位置对应的偏移量
+    const offsetXPrev = w / 2 - vt.x * cellWPrev;
+    const offsetYPrev = h / 2 - vt.y * cellHPrev;
+
+    // 鼠标下的网格坐标（缩放前）
+    const gridX = (mouseX - offsetXPrev) / cellWPrev;
+    const gridY = (mouseY - offsetYPrev) / cellHPrev;
+
+    // 缩放后保持鼠标下的网格坐标不变
+    const newVx = (w / 2 - mouseX + gridX * cellWNew) / cellWNew;
+    const newVy = (h / 2 - mouseY + gridY * cellHNew) / cellHNew;
+
+    setView({ x: newVx, y: newVy, zoom: newZoom });
+    drawOverlay();
+  };
+
+  const frame = () => {
+    clearBackground();
+    requestAnimationFrame(frame);
   };
 
   onMount(async () => {
-    const canvas = canvasRef!;
-    if (!('gpu' in navigator)) {
-      console.error('WebGPU not supported');
-      return;
-    }
-
-    const adapter = await (navigator as any).gpu.requestAdapter();
-    device = await adapter.requestDevice();
-    context = canvas.getContext('webgpu') as unknown as GPUCanvasContext;
-    format = (navigator as any).gpu.getPreferredCanvasFormat();
-    context.configure({ device, format, alphaMode: 'premultiplied' });
-
-    renderer = new InfiniteCanvasRenderer(canvas, device, context, format);
-    await renderer.init();
-
-    resizeCanvas();
-    updateGrid();
-    view.zoom = clampZoom(zoom()) / 100;
-    updateView();
-    render();
-
-    const onResize = () => {
-      resizeCanvas();
-      updateView();
-      render();
-    };
-    window.addEventListener('resize', onResize);
-
-    const onWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      const sign = e.deltaY > 0 ? -1 : 1;
-      const step = Math.max(1, Math.round(zoom() * 0.1));
-      const next = clampZoom(zoom() + sign * step);
-
-      if (!renderer) return;
-      const rect = canvas.getBoundingClientRect();
-      const px = e.clientX - rect.left;
-      const py = e.clientY - rect.top;
-      const before = renderer.screenToWorld(px, py);
-
-      setZoom(next);
-      view.zoom = next / 100;
-      updateView();
-
-      const after = renderer.screenToWorld(px, py);
-      view.x += before.x - after.x;
-      view.y += before.y - after.y;
-      updateView();
-    };
-
-    const onPointerDown = (e: PointerEvent) => {
-      const isMiddle = e.button === 1;
-      const isAltLeft = e.button === 0 && e.altKey;
-      if (isMiddle || isAltLeft) {
-        isPanning = true;
-        panStart = { x: e.clientX, y: e.clientY };
-        viewStart = { x: view.x, y: view.y };
-        (e.target as Element).setPointerCapture(e.pointerId);
+    if (!webgpuCanvasRef) return;
+    renderer = new Renderer(webgpuCanvasRef);
+    const ok = await renderer.init();
+    if (!ok) return;
+    resize();
+    frame();
+    window.addEventListener('resize', resize);
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        e.preventDefault();
+        setSpaceDown(true);
       }
     };
-
-    const onPointerMove = (e: PointerEvent) => {
-      if (!renderer) return;
-      const rect = canvas.getBoundingClientRect();
-      const px = e.clientX - rect.left;
-      const py = e.clientY - rect.top;
-
-      const grid = renderer.screenToGrid(px, py);
-      renderer.setHoveredCell({ x: grid.x, y: grid.y });
-
-      if (isPanning) {
-        const dx = e.clientX - panStart.x;
-        const dy = e.clientY - panStart.y;
-        const dpr = Math.max(1, window.devicePixelRatio || 1);
-        const worldDx = dx * dpr / view.zoom;
-        const worldDy = dy * dpr / view.zoom;
-        view.x = viewStart.x - worldDx;
-        view.y = viewStart.y - worldDy;
-        updateView();
-      } else {
-        render();
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        e.preventDefault();
+        setSpaceDown(false);
       }
     };
-
-    const onPointerUp = (e: PointerEvent) => {
-      if (isPanning) {
-        isPanning = false;
-        (e.target as Element).releasePointerCapture(e.pointerId);
-      }
-    };
-
-    canvas.addEventListener('wheel', onWheel, { passive: false });
-    canvas.addEventListener('pointerdown', onPointerDown);
-    window.addEventListener('pointermove', onPointerMove);
-    window.addEventListener('pointerup', onPointerUp);
-
-    onCleanup(() => {
-      window.removeEventListener('resize', onResize);
-      canvas.removeEventListener('wheel', onWheel as EventListener);
-      canvas.removeEventListener('pointerdown', onPointerDown as EventListener);
-      window.removeEventListener('pointermove', onPointerMove as EventListener);
-      window.removeEventListener('pointerup', onPointerUp as EventListener);
-      renderer?.destroy();
-    });
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    // store to cleanup
+    (window as any).__icb_onKeyDown = onKeyDown;
+    (window as any).__icb_onKeyUp = onKeyUp;
   });
 
-  const Controls = () => (
-    <div style={{
-      position: 'absolute', left: '12px', top: '12px', padding: '12px',
-      background: 'rgba(0,0,0,0.5)', color: '#fff', 'border-radius': '8px',
-      display: 'flex', 'flex-direction': 'column', gap: '8px', 'backdrop-filter': 'blur(6px)'
-    }}>
-      <div style={{ display: 'flex', gap: '8px', 'align-items': 'center' }}>
-        <label>缩放</label>
-        <input type="range" min={10} max={500} value={zoom()}
-          onInput={(e) => { const v = clampZoom(Number((e.target as HTMLInputElement).value)); setZoom(v); view.zoom = v/100; updateView(); }} />
-        <span>{zoom()}%</span>
-      </div>
-      <div style={{ display: 'flex', gap: '8px', 'align-items': 'center' }}>
-        <label>背景</label>
-        <select value={background()} onChange={(e) => { setBackground((e.target as HTMLSelectElement).value); updateGrid(); }}>
-          <option value="#000000">纯黑</option>
-          <option value="#ffffff">纯白</option>
-          <option value="#00000000">透明</option>
-        </select>
-        <input type="color" value={background()} onInput={(e) => { setBackground((e.target as HTMLInputElement).value); updateGrid(); }} />
-      </div>
-      <div style={{ display: 'flex', gap: '8px', 'align-items': 'center' }}>
-        <label>网格 行×列</label>
-        <input type="number" min={1} max={1024} value={gridRows()} style={{ width: '80px' }}
-          onInput={(e) => { setGridRows(Number((e.target as HTMLInputElement).value || '1')); updateGrid(); }} />
-        ×
-        <input type="number" min={1} max={1024} value={gridCols()} style={{ width: '80px' }}
-          onInput={(e) => { setGridCols(Number((e.target as HTMLInputElement).value || '1')); updateGrid(); }} />
-      </div>
-      <div style={{ display: 'flex', gap: '8px', 'align-items': 'center' }}>
-        <label>线宽</label>
-        <input type="number" min={1} max={10} value={gridLineWidth()} style={{ width: '80px' }}
-          onInput={(e) => { setGridLineWidth(Number((e.target as HTMLInputElement).value || '1')); updateGrid(); }} />
-        <label>颜色</label>
-        <input type="color" value={gridLineColor()} onInput={(e) => { setGridLineColor((e.target as HTMLInputElement).value); updateGrid(); }} />
-      </div>
-      <div style={{ 'font-size': '12px', opacity: 0.8 }}>
-        Alt + 左键 或 中键拖动 平移
-      </div>
-    </div>
-  );
+  onCleanup(() => {
+    window.removeEventListener('resize', resize);
+    const kd = (window as any).__icb_onKeyDown as ((e: KeyboardEvent) => void) | undefined;
+    const ku = (window as any).__icb_onKeyUp as ((e: KeyboardEvent) => void) | undefined;
+    if (kd) window.removeEventListener('keydown', kd);
+    if (ku) window.removeEventListener('keyup', ku);
+  });
 
   return (
-    <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden' }}>
-      <canvas ref={(el) => (canvasRef = el)} style={{ width: '100%', height: '100%', display: 'block' }} />
-      <Controls />
+    <div style={{ width: '100%', height: '100%', position: 'relative', 'background-color': '#0b0b11' }}>
+      {/* top controls */}
+      <div style={{ position: 'absolute', top: '12px', left: '12px', display: 'flex', gap: '8px', 'z-index': 10 }}>
+        <select value={bgPreset()} onChange={(e) => setBgPreset(e.currentTarget.value as BgPreset)}>
+          <option value="black">纯黑</option>
+          <option value="white">纯白</option>
+          <option value="transparent">透明</option>
+          <option value="custom">自定义</option>
+        </select>
+        <input type="color" value={customBg()} onInput={(e) => setCustomBg(e.currentTarget.value)} disabled={bgPreset() !== 'custom'} />
+
+        <label>
+          列数
+          <input type="number" min="1" value={grid().cols}
+                 onInput={(e) => { const cols = parseInt(e.currentTarget.value) || 1; setGrid({ ...grid(), cols }); drawOverlay(); }}
+                 style={{ width: '64px', 'margin-left': '6px' }} />
+        </label>
+        <label>
+          行数
+          <input type="number" min="1" value={grid().rows}
+                 onInput={(e) => { const rows = parseInt(e.currentTarget.value) || 1; setGrid({ ...grid(), rows }); drawOverlay(); }}
+                 style={{ width: '64px', 'margin-left': '6px' }} />
+        </label>
+        <label>
+          格宽
+          <input type="number" min="1" value={grid().cellWidth}
+                 onInput={(e) => { const cellWidth = parseInt(e.currentTarget.value) || 1; setGrid({ ...grid(), cellWidth }); drawOverlay(); }}
+                 style={{ width: '64px', 'margin-left': '6px' }} />
+        </label>
+        <label>
+          格高
+          <input type="number" min="1" value={grid().cellHeight}
+                 onInput={(e) => { const cellHeight = parseInt(e.currentTarget.value) || 1; setGrid({ ...grid(), cellHeight }); drawOverlay(); }}
+                 style={{ width: '64px', 'margin-left': '6px' }} />
+        </label>
+        <label>
+          线宽
+          <input type="number" min="1" value={grid().lineWidth}
+                 onInput={(e) => { const lineWidth = parseInt(e.currentTarget.value) || 1; setGrid({ ...grid(), lineWidth }); drawOverlay(); }}
+                 style={{ width: '64px', 'margin-left': '6px' }} />
+        </label>
+        <label>
+          线色
+          <input type="text" value={grid().lineColor}
+                 onInput={(e) => { const lineColor = e.currentTarget.value; setGrid({ ...grid(), lineColor }); drawOverlay(); }}
+                 style={{ width: '160px', 'margin-left': '6px' }} />
+        </label>
+
+        <div style={{ padding: '4px 8px', color: '#fff' }}>缩放 {(view().zoom * 100).toFixed(0)}%</div>
+      </div>
+
+      {/* canvases */}
+      <canvas ref={webgpuCanvasRef} style={{ width: '100%', height: '100%', display: 'block' }} />
+      <canvas ref={overlayCanvasRef}
+              style={{ position: 'absolute', inset: 0 }}
+              onMouseMove={onMouseMove}
+              onMouseDown={onMouseDown}
+              onMouseUp={onMouseUp}
+              onMouseLeave={onMouseUp}
+              onWheel={onWheel} />
     </div>
   );
 }
+
+export default InfiniteCanvasBetter;
 
 
