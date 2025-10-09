@@ -1,0 +1,236 @@
+/**
+ * 无限画布样式
+ */
+
+.infinite-canvas-container {
+  display: flex;
+  flex-direction: column;
+  width: 100vw;
+  height: 100vh;
+  background: #1a1a1a;
+  color: #e0e0e0;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  overflow: hidden;
+}
+
+/* 工具栏 */
+.canvas-toolbar {
+  display: flex;
+  gap: 2rem;
+  padding: 1rem 1.5rem;
+  background: #2a2a2a;
+  border-bottom: 1px solid #444;
+  flex-shrink: 0;
+}
+
+.toolbar-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.toolbar-section h3 {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #aaa;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* 颜色预设按钮 */
+.color-presets {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.color-btn {
+  width: 32px;
+  height: 32px;
+  border: 2px solid #555;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+}
+
+.color-btn:hover {
+  border-color: #888;
+  transform: scale(1.1);
+}
+
+.color-btn:active {
+  transform: scale(0.95);
+}
+
+.color-btn.black {
+  background-color: #000;
+}
+
+.color-btn.white {
+  background-color: #fff;
+}
+
+.color-btn.transparent {
+  background: 
+    linear-gradient(45deg, #ccc 25%, transparent 25%),
+    linear-gradient(-45deg, #ccc 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #ccc 75%),
+    linear-gradient(-45deg, transparent 75%, #ccc 75%);
+  background-size: 8px 8px;
+  background-position: 0 0, 0 4px, 4px -4px, -4px 0px;
+}
+
+.custom-color-wrapper {
+  position: relative;
+}
+
+.color-btn.custom {
+  border: 2px solid #888;
+}
+
+.color-picker {
+  position: absolute;
+  top: 40px;
+  left: 0;
+  z-index: 10;
+  width: 150px;
+  height: 40px;
+  cursor: pointer;
+  border: 2px solid #555;
+  border-radius: 4px;
+  background: #2a2a2a;
+}
+
+/* 网格控制 */
+.grid-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.grid-controls label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.grid-controls input[type="number"] {
+  width: 80px;
+  padding: 0.25rem 0.5rem;
+  background: #1a1a1a;
+  border: 1px solid #555;
+  border-radius: 4px;
+  color: #e0e0e0;
+  font-size: 0.875rem;
+}
+
+.grid-controls input[type="color"] {
+  width: 60px;
+  height: 28px;
+  padding: 2px;
+  background: #1a1a1a;
+  border: 1px solid #555;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.grid-controls input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+/* 信息显示 */
+.info-display {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.875rem;
+  color: #bbb;
+  font-family: 'Courier New', monospace;
+}
+
+/* 画布包装器 */
+.canvas-wrapper {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+  position: relative;
+  background: #0f0f0f;
+}
+
+/* 棋盘格背景 */
+.canvas-background {
+  position: absolute;
+  width: 1920px;
+  height: 1080px;
+  background-image: 
+    linear-gradient(45deg, #808080 25%, transparent 25%),
+    linear-gradient(-45deg, #808080 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #808080 75%),
+    linear-gradient(-45deg, transparent 75%, #808080 75%);
+  background-size: 20px 20px;
+  background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+  background-color: #404040;
+}
+
+.canvas-wrapper canvas {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+  position: relative;
+  z-index: 1;
+}
+
+/* 操作提示 */
+.controls-hint {
+  position: absolute;
+  bottom: 1rem;
+  right: 1rem;
+  background: rgba(0, 0, 0, 0.8);
+  padding: 1rem;
+  border-radius: 8px;
+  border: 1px solid #444;
+  backdrop-filter: blur(10px);
+  max-width: 300px;
+}
+
+.controls-hint h4 {
+  margin: 0 0 0.5rem 0;
+  font-size: 0.875rem;
+  color: #aaa;
+  text-transform: uppercase;
+}
+
+.controls-hint ul {
+  margin: 0;
+  padding-left: 1.5rem;
+  font-size: 0.8rem;
+  line-height: 1.6;
+  color: #ccc;
+}
+
+.controls-hint li {
+  margin-bottom: 0.25rem;
+}
+
+/* 响应式 */
+@media (max-width: 1024px) {
+  .canvas-toolbar {
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+
+  .controls-hint {
+    bottom: 0.5rem;
+    right: 0.5rem;
+    font-size: 0.75rem;
+  }
+}
+
