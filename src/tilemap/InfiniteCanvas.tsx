@@ -54,6 +54,8 @@ type BrushMode = 'pixel' | 'interpolated';
 export function InfiniteCanvas() {
   let canvasRef: HTMLCanvasElement | undefined;
   let containerRef: HTMLDivElement | undefined;
+  let rafId: number | null = null; // requestAnimationFrame ID
+  const imageCache = new Map<string, HTMLImageElement>(); // 组件级别的图像缓存
 
   const [bgPreset, setBgPreset] = createSignal<BgPreset>('#1a1a1a');
   const [customBg, setCustomBg] = createSignal<string>('#1e1e2e');
@@ -70,6 +72,7 @@ export function InfiniteCanvas() {
   const [isPanning, setIsPanning] = createSignal(false);
   const [lastMouse, setLastMouse] = createSignal({ x: 0, y: 0 });
   const [spaceDown, setSpaceDown] = createSignal(false);
+  const [panningStartedWithSpace, setPanningStartedWithSpace] = createSignal(false);
   const [drawerOpen, setDrawerOpen] = createSignal(false);
   const [lastJPress, setLastJPress] = createSignal(0);
   
@@ -109,6 +112,15 @@ export function InfiniteCanvas() {
     return customBg();
   };
 
+  // 使用 requestAnimationFrame 节流绘制，避免闪烁
+  const requestDraw = () => {
+    if (rafId !== null) return; // 已经有待处理的绘制请求
+    rafId = requestAnimationFrame(() => {
+      draw();
+      rafId = null;
+    });
+  };
+
   const resize = () => {
     if (!canvasRef) return;
     const rect = canvasRef.getBoundingClientRect();
@@ -118,7 +130,7 @@ export function InfiniteCanvas() {
     canvasRef.width = Math.floor(rect.width * dpr);
     canvasRef.height = Math.floor(rect.height * dpr);
     
-    draw();
+    requestDraw();
   };
 
   const draw = () => {
@@ -168,9 +180,6 @@ export function InfiniteCanvas() {
       ctx.imageSmoothingQuality = 'high';
     }
     
-    // 创建图像缓存以提高性能
-    const imageCache = new Map<string, HTMLImageElement>();
-    
     tiles.forEach((tile, key) => {
       const [c, r] = key.split(',').map(Number);
       if (c >= 0 && c < cols && r >= 0 && r < rows) {
@@ -211,16 +220,16 @@ export function InfiniteCanvas() {
         let img = imageCache.get(tile.imageData);
         if (!img) {
           img = new Image();
+          img.onload = () => {
+            requestDraw(); // 图像加载完成后重绘
+          };
           img.src = tile.imageData;
           imageCache.set(tile.imageData, img);
         }
         
-        if (img.complete) {
+        // 只绘制已完全加载的图像
+        if (img.complete && img.naturalWidth > 0) {
           ctx.drawImage(img, x, y, dw, dh);
-        } else {
-          img.onload = () => {
-            draw(); // 图像加载完成后重绘
-          };
         }
       }
     });
@@ -318,15 +327,31 @@ export function InfiniteCanvas() {
       const img = new Image();
       img.onload = () => {
         const id = Date.now().toString();
+        
+        // 根据宽高比自动计算默认的行列数（假设瓦片为正方形）
+        const aspectRatio = img.width / img.height;
+        let cols = 1;
+        let rows = 1;
+        
+        if (aspectRatio >= 1) {
+          // 宽度 >= 高度，按宽高比向下取整得到列数
+          cols = Math.floor(aspectRatio) || 1;
+          rows = 1;
+        } else {
+          // 高度 > 宽度，按高宽比向下取整得到行数
+          rows = Math.floor(1 / aspectRatio) || 1;
+          cols = 1;
+        }
+        
         const sheet: SpriteSheet = {
           id,
           name: file.name,
           url: e.target?.result as string,
           image: img,
-          rows: 1,
-          cols: 1,
-          tileWidth: img.width,
-          tileHeight: img.height
+          rows,
+          cols,
+          tileWidth: img.width / cols,
+          tileHeight: img.height / rows
         };
         setSpriteSheets([...spriteSheets(), sheet]);
       };
@@ -362,7 +387,7 @@ export function InfiniteCanvas() {
     // 清除该雪碧图相关的合并瓦片
     setMergedTiles(mergedTiles().filter(m => m.sheetId !== id));
     
-    draw();
+    requestDraw();
   };
 
   const toggleTileSelection = (sheetId: string, row: number, col: number) => {
@@ -472,6 +497,16 @@ export function InfiniteCanvas() {
       // 转换为base64，保存为独立数据（使用PNG格式，无损压缩）
       const imageData = tempCanvas.toDataURL('image/png');
       
+      // 预加载图像到缓存，避免绘制时的延迟
+      if (!imageCache.has(imageData)) {
+        const img = new Image();
+        img.onload = () => {
+          requestDraw(); // 图像加载完成后重绘
+        };
+        img.src = imageData;
+        imageCache.set(imageData, img);
+      }
+      
       setTileMap(tiles => {
         const newTiles = new Map(tiles);
         const tileData: TileData = {
@@ -485,7 +520,7 @@ export function InfiniteCanvas() {
         newTiles.set(`${c},${r}`, tileData);
         return newTiles;
       });
-      draw();
+      requestDraw();
     }
   };
 
@@ -495,23 +530,23 @@ export function InfiniteCanvas() {
     
     setTileMap(tiles => {
       const newTiles = new Map(tiles);
-      newTiles.delete(`${c},${r}`);
+      const key = `${c},${r}`;
+      const tile = newTiles.get(key);
+      
+      // 从图像缓存中移除
+      if (tile) {
+        imageCache.delete(tile.imageData);
+      }
+      
+      newTiles.delete(key);
       return newTiles;
     });
-    draw();
+    requestDraw();
   };
 
   const onMouseMove = (e: MouseEvent) => {
+    // 如果正在拖拽，由 window 事件处理，避免重复绘制
     if (isPanning()) {
-      const dx = e.clientX - lastMouse().x;
-      const dy = e.clientY - lastMouse().y;
-      const vt = view();
-      const { cellWidth, cellHeight } = grid();
-      const cellW = cellWidth * vt.zoom;
-      const cellH = cellHeight * vt.zoom;
-      setView({ x: vt.x - dx / cellW, y: vt.y - dy / cellH, zoom: vt.zoom });
-      setLastMouse({ x: e.clientX, y: e.clientY });
-      draw();
       return;
     }
     
@@ -528,13 +563,15 @@ export function InfiniteCanvas() {
     if (isDrawing() && cell) {
       placeTile(cell.c, cell.r);
     } else {
-      draw();
+      requestDraw();
     }
   };
 
   const onMouseDown = (e: MouseEvent) => {
     if (e.button === 1 || (e.button === 0 && spaceDown())) {
+      e.preventDefault();
       setIsPanning(true);
+      setPanningStartedWithSpace(e.button === 0 && spaceDown());
       setLastMouse({ x: e.clientX, y: e.clientY });
     } else if (e.button === 0 && !spaceDown() && selectedTile()) {
       setIsDrawing(true);
@@ -547,6 +584,7 @@ export function InfiniteCanvas() {
 
   const onMouseUp = () => {
     setIsPanning(false);
+    setPanningStartedWithSpace(false);
     setIsDrawing(false);
   };
 
@@ -586,12 +624,12 @@ export function InfiniteCanvas() {
     const newVy = (h / 2 - gridTotalHNew / 2 - mouseY + gridY * cellHNew) / cellHNew;
 
     setView({ x: newVx, y: newVy, zoom: newZoom });
-    draw();
+    requestDraw();
   };
 
   const resetView = () => {
     setView({ x: 0, y: 0, zoom: 0.5 });
-    draw();
+    requestDraw();
   };
 
   onMount(() => {
@@ -619,11 +657,13 @@ export function InfiniteCanvas() {
       if (e.code === 'KeyD' && !dKeyDown()) {
         e.preventDefault();
         setDKeyDown(true);
+        requestDraw();
       }
       // L 键切换网格线显示/隐藏
       if (e.code === 'KeyL') {
         e.preventDefault();
         setShowGrid(!showGrid());
+        requestDraw();
       }
     };
     
@@ -636,22 +676,64 @@ export function InfiniteCanvas() {
       if (e.code === 'KeyD') {
         e.preventDefault();
         setDKeyDown(false);
+        requestDraw();
+      }
+    };
+    
+    // Window 级别的鼠标事件，确保拖拽在整个窗口范围内都能正常工作
+    const onWindowMouseMove = (e: MouseEvent) => {
+      if (isPanning()) {
+        e.preventDefault();
+        const dx = e.clientX - lastMouse().x;
+        const dy = e.clientY - lastMouse().y;
+        const vt = view();
+        const { cellWidth, cellHeight } = grid();
+        const cellW = cellWidth * vt.zoom;
+        const cellH = cellHeight * vt.zoom;
+        setView({ x: vt.x - dx / cellW, y: vt.y - dy / cellH, zoom: vt.zoom });
+        setLastMouse({ x: e.clientX, y: e.clientY });
+        requestDraw();
+      }
+    };
+    
+    const onWindowMouseUp = () => {
+      if (isPanning() || isDrawing()) {
+        setIsPanning(false);
+        setPanningStartedWithSpace(false);
+        setIsDrawing(false);
       }
     };
     
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('mousemove', onWindowMouseMove);
+    window.addEventListener('mouseup', onWindowMouseUp);
     
     (window as any).__ic_onKeyDown = onKeyDown;
     (window as any).__ic_onKeyUp = onKeyUp;
+    (window as any).__ic_onWindowMouseMove = onWindowMouseMove;
+    (window as any).__ic_onWindowMouseUp = onWindowMouseUp;
   });
 
   onCleanup(() => {
     window.removeEventListener('resize', resize);
     const kd = (window as any).__ic_onKeyDown;
     const ku = (window as any).__ic_onKeyUp;
+    const wmm = (window as any).__ic_onWindowMouseMove;
+    const wmu = (window as any).__ic_onWindowMouseUp;
     if (kd) window.removeEventListener('keydown', kd);
     if (ku) window.removeEventListener('keyup', ku);
+    if (wmm) window.removeEventListener('mousemove', wmm);
+    if (wmu) window.removeEventListener('mouseup', wmu);
+    
+    // 清理待处理的动画帧
+    if (rafId !== null) {
+      cancelAnimationFrame(rafId);
+      rafId = null;
+    }
+    
+    // 清理图像缓存
+    imageCache.clear();
   });
 
   // 监听背景色变化，更新容器背景
@@ -664,7 +746,7 @@ export function InfiniteCanvas() {
   // 监听雪碧图变化，重绘画布
   createEffect(() => {
     spriteSheets();
-    draw();
+    requestDraw();
   });
 
   return (
@@ -1180,37 +1262,37 @@ export function InfiniteCanvas() {
               <label style={{ display: 'flex', 'justify-content': 'space-between', 'align-items': 'center' }}>
                 <span>列数</span>
                 <input type="number" min="1" value={grid().cols}
-                       onInput={(e) => { const cols = parseInt(e.currentTarget.value) || 1; setGrid({ ...grid(), cols }); draw(); }}
+                       onInput={(e) => { const cols = parseInt(e.currentTarget.value) || 1; setGrid({ ...grid(), cols }); requestDraw(); }}
                        style={{ width: '120px', padding: '6px', 'border-radius': '6px', border: '1px solid rgba(255,255,255,0.2)', 'background-color': 'rgba(50,50,66,0.5)', color: 'white' }} />
               </label>
               <label style={{ display: 'flex', 'justify-content': 'space-between', 'align-items': 'center' }}>
                 <span>行数</span>
                 <input type="number" min="1" value={grid().rows}
-                       onInput={(e) => { const rows = parseInt(e.currentTarget.value) || 1; setGrid({ ...grid(), rows }); draw(); }}
+                       onInput={(e) => { const rows = parseInt(e.currentTarget.value) || 1; setGrid({ ...grid(), rows }); requestDraw(); }}
                        style={{ width: '120px', padding: '6px', 'border-radius': '6px', border: '1px solid rgba(255,255,255,0.2)', 'background-color': 'rgba(50,50,66,0.5)', color: 'white' }} />
               </label>
               <label style={{ display: 'flex', 'justify-content': 'space-between', 'align-items': 'center' }}>
                 <span>格宽 (px)</span>
                 <input type="number" min="1" value={grid().cellWidth}
-                       onInput={(e) => { const cellWidth = parseInt(e.currentTarget.value) || 1; setGrid({ ...grid(), cellWidth }); draw(); }}
+                       onInput={(e) => { const cellWidth = parseInt(e.currentTarget.value) || 1; setGrid({ ...grid(), cellWidth }); requestDraw(); }}
                        style={{ width: '120px', padding: '6px', 'border-radius': '6px', border: '1px solid rgba(255,255,255,0.2)', 'background-color': 'rgba(50,50,66,0.5)', color: 'white' }} />
               </label>
               <label style={{ display: 'flex', 'justify-content': 'space-between', 'align-items': 'center' }}>
                 <span>格高 (px)</span>
                 <input type="number" min="1" value={grid().cellHeight}
-                       onInput={(e) => { const cellHeight = parseInt(e.currentTarget.value) || 1; setGrid({ ...grid(), cellHeight }); draw(); }}
+                       onInput={(e) => { const cellHeight = parseInt(e.currentTarget.value) || 1; setGrid({ ...grid(), cellHeight }); requestDraw(); }}
                        style={{ width: '120px', padding: '6px', 'border-radius': '6px', border: '1px solid rgba(255,255,255,0.2)', 'background-color': 'rgba(50,50,66,0.5)', color: 'white' }} />
               </label>
               <label style={{ display: 'flex', 'justify-content': 'space-between', 'align-items': 'center' }}>
                 <span>线宽 (px)</span>
                 <input type="number" min="1" value={grid().lineWidth}
-                       onInput={(e) => { const lineWidth = parseInt(e.currentTarget.value) || 1; setGrid({ ...grid(), lineWidth }); draw(); }}
+                       onInput={(e) => { const lineWidth = parseInt(e.currentTarget.value) || 1; setGrid({ ...grid(), lineWidth }); requestDraw(); }}
                        style={{ width: '120px', padding: '6px', 'border-radius': '6px', border: '1px solid rgba(255,255,255,0.2)', 'background-color': 'rgba(50,50,66,0.5)', color: 'white' }} />
               </label>
               <label style={{ display: 'flex', 'justify-content': 'space-between', 'align-items': 'center' }}>
                 <span>线色</span>
                 <input type="text" value={grid().lineColor}
-                       onInput={(e) => { const lineColor = e.currentTarget.value; setGrid({ ...grid(), lineColor }); draw(); }}
+                       onInput={(e) => { const lineColor = e.currentTarget.value; setGrid({ ...grid(), lineColor }); requestDraw(); }}
                        style={{ width: '180px', padding: '6px', 'border-radius': '6px', border: '1px solid rgba(255,255,255,0.2)', 'background-color': 'rgba(50,50,66,0.5)', color: 'white' }} />
               </label>
             </div>
@@ -1222,17 +1304,23 @@ export function InfiniteCanvas() {
             <div style={{ display: 'flex', 'flex-direction': 'column', gap: '8px', 'font-size': '14px', opacity: 0.8 }}>
               <div>缩放: {(view().zoom * 100).toFixed(0)}%</div>
               <div>偏移: ({view().x.toFixed(1)}, {view().y.toFixed(1)})</div>
-              {hoverCell() && (
-                <div>悬浮: 列{hoverCell()!.c} 行{hoverCell()!.r}</div>
-              )}
-              {selectedTile() && !dKeyDown() && (
-                <div style={{ color: 'rgba(72,187,120,1)' }}>
-                  已选瓦片: 行{selectedTile()!.row} 列{selectedTile()!.col}
-                  {selectedTile()!.spanRows && selectedTile()!.spanCols && (
-                    <span> ({selectedTile()!.spanRows}×{selectedTile()!.spanCols})</span>
-                  )}
-                </div>
-              )}
+              {(() => {
+                const cell = hoverCell();
+                return cell && (
+                  <div>悬浮: 列{cell.c} 行{cell.r}</div>
+                );
+              })()}
+              {(() => {
+                const tile = selectedTile();
+                return tile && !dKeyDown() && (
+                  <div style={{ color: 'rgba(72,187,120,1)' }}>
+                    已选瓦片: 行{tile.row} 列{tile.col}
+                    {tile.spanRows && tile.spanCols && (
+                      <span> ({tile.spanRows}×{tile.spanCols})</span>
+                    )}
+                  </div>
+                );
+              })()}
               {dKeyDown() && (
                 <div style={{ color: 'rgba(220,50,50,1)', 'font-weight': '600' }}>
                   🗑️ 橡皮擦模式
@@ -1283,12 +1371,13 @@ export function InfiniteCanvas() {
 
       <canvas 
         ref={canvasRef}
-        style={{ width: '100%', height: '100%', background: 'transparent' }}
+        style={{ width: '100%', height: '100%', background: 'transparent', cursor: isPanning() ? 'grabbing' : spaceDown() ? 'grab' : 'default' }}
         onMouseMove={onMouseMove}
         onMouseDown={onMouseDown}
         onMouseUp={onMouseUp}
-        onMouseLeave={onMouseUp}
+        onMouseLeave={() => setHoverCell(null)}
         onWheel={onWheel}
+        onContextMenu={(e) => e.preventDefault()}
       />
     </div>
   );
