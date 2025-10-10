@@ -109,8 +109,12 @@ export function InfiniteCanvas() {
   const resize = () => {
     if (!canvasRef) return;
     const rect = canvasRef.getBoundingClientRect();
-    canvasRef.width = Math.floor(rect.width);
-    canvasRef.height = Math.floor(rect.height);
+    const dpr = window.devicePixelRatio || 1;
+    
+    // 设置canvas的实际像素尺寸（考虑设备像素比）
+    canvasRef.width = Math.floor(rect.width * dpr);
+    canvasRef.height = Math.floor(rect.height * dpr);
+    
     draw();
   };
 
@@ -119,11 +123,18 @@ export function InfiniteCanvas() {
     const ctx = canvasRef.getContext('2d');
     if (!ctx) return;
 
-    const w = canvasRef.width;
-    const h = canvasRef.height;
+    const dpr = window.devicePixelRatio || 1;
+    // 使用CSS像素尺寸进行布局计算
+    const rect = canvasRef.getBoundingClientRect();
+    const w = rect.width;
+    const h = rect.height;
     
-    // 清空画布
-    ctx.clearRect(0, 0, w, h);
+    // 重置变换矩阵并清空画布（使用物理像素尺寸）
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvasRef.width, canvasRef.height);
+    
+    // 设置DPR缩放，使绘制坐标与CSS像素对应
+    ctx.scale(dpr, dpr);
 
     const { cols, rows, cellWidth, cellHeight, lineWidth, lineColor } = grid();
     const vt = view();
@@ -160,14 +171,38 @@ export function InfiniteCanvas() {
     tiles.forEach((tile, key) => {
       const [c, r] = key.split(',').map(Number);
       if (c >= 0 && c < cols && r >= 0 && r < rows) {
-        const x = offsetX + c * cellW;
-        const y = offsetY + r * cellH;
-        
         // 计算显示尺寸（支持合并瓦片）
         const spanRows = tile.spanRows || 1;
         const spanCols = tile.spanCols || 1;
-        const dw = spanCols * cellW;
-        const dh = spanRows * cellH;
+        
+        // 关键：基于网格边界计算，而不是累积位置
+        // 这样可以确保相邻瓦片完美对齐，没有缝隙或重叠
+        const x1 = offsetX + c * cellW;
+        const y1 = offsetY + r * cellH;
+        const x2 = offsetX + (c + spanCols) * cellW;
+        const y2 = offsetY + (r + spanRows) * cellH;
+        
+        let x, y, dw, dh;
+        
+        // 在像素模式下，对齐到整数像素边界，避免亚像素渲染导致的模糊和缝隙
+        if (mode === 'pixel') {
+          // 使用 Math.floor 和边界差值确保无缝对齐
+          const px1 = Math.floor(x1);
+          const py1 = Math.floor(y1);
+          const px2 = Math.floor(x2);
+          const py2 = Math.floor(y2);
+          
+          x = px1;
+          y = py1;
+          dw = px2 - px1; // 宽度 = 右边界 - 左边界
+          dh = py2 - py1; // 高度 = 下边界 - 上边界
+        } else {
+          // 插值模式允许亚像素渲染
+          x = x1;
+          y = y1;
+          dw = x2 - x1;
+          dh = y2 - y1;
+        }
         
         // 从缓存或创建新的图像
         let img = imageCache.get(tile.imageData);
@@ -192,19 +227,23 @@ export function InfiniteCanvas() {
       ctx.lineWidth = lineWidth;
       ctx.strokeStyle = lineColor;
 
+      // 垂直线 - 对齐到像素边界以避免模糊
       for (let c = 0; c <= cols; c++) {
         const x = offsetX + c * cellW;
+        const px = Math.floor(x) + 0.5; // +0.5 让线条更清晰（位于像素中心）
         ctx.beginPath();
-        ctx.moveTo(x, offsetY);
-        ctx.lineTo(x, offsetY + rows * cellH);
+        ctx.moveTo(px, offsetY);
+        ctx.lineTo(px, offsetY + rows * cellH);
         ctx.stroke();
       }
 
+      // 水平线 - 对齐到像素边界以避免模糊
       for (let r = 0; r <= rows; r++) {
         const y = offsetY + r * cellH;
+        const py = Math.floor(y) + 0.5; // +0.5 让线条更清晰（位于像素中心）
         ctx.beginPath();
-        ctx.moveTo(offsetX, y);
-        ctx.lineTo(offsetX + cols * cellW, y);
+        ctx.moveTo(offsetX, py);
+        ctx.lineTo(offsetX + cols * cellW, py);
         ctx.stroke();
       }
     }
@@ -213,8 +252,21 @@ export function InfiniteCanvas() {
     if (hoverCell()) {
       const { c, r } = hoverCell()!;
       if (c >= 0 && c < cols && r >= 0 && r < rows) {
-        const x = offsetX + c * cellW;
-        const y = offsetY + r * cellH;
+        // 使用与瓦片相同的边界计算方法，确保完美对齐
+        const x1 = offsetX + c * cellW;
+        const y1 = offsetY + r * cellH;
+        const x2 = offsetX + (c + 1) * cellW;
+        const y2 = offsetY + (r + 1) * cellH;
+        
+        const px1 = Math.floor(x1);
+        const py1 = Math.floor(y1);
+        const px2 = Math.floor(x2);
+        const py2 = Math.floor(y2);
+        
+        const x = px1;
+        const y = py1;
+        const dw = px2 - px1;
+        const dh = py2 - py1;
         
         // 橡皮擦模式显示红色
         if (dKeyDown()) {
@@ -226,8 +278,8 @@ export function InfiniteCanvas() {
         }
         
         ctx.lineWidth = Math.max(1, lineWidth);
-        ctx.fillRect(x, y, cellW, cellH);
-        ctx.strokeRect(x, y, cellW, cellH);
+        ctx.fillRect(x, y, dw, dh);
+        ctx.strokeRect(x, y, dw, dh);
       }
     }
 
@@ -240,8 +292,9 @@ export function InfiniteCanvas() {
     const x = clientX - rect.left;
     const y = clientY - rect.top;
     const { cols, rows, cellWidth, cellHeight } = grid();
-    const w = canvasRef.width;
-    const h = canvasRef.height;
+    // 使用CSS像素尺寸，而不是物理像素
+    const w = rect.width;
+    const h = rect.height;
     const vt = view();
 
     const cellW = cellWidth * vt.zoom;
@@ -286,8 +339,8 @@ export function InfiniteCanvas() {
           ...sheet,
           rows,
           cols,
-          tileWidth: Math.floor(sheet.image.width / cols),
-          tileHeight: Math.floor(sheet.image.height / rows)
+          tileWidth: sheet.image.width / cols,
+          tileHeight: sheet.image.height / rows
         };
       }
       return sheet;
@@ -388,37 +441,42 @@ export function InfiniteCanvas() {
     // 计算瓦片尺寸
     const spanRows = tile.spanRows || 1;
     const spanCols = tile.spanCols || 1;
-    const tileWidth = sheet.tileWidth * spanCols;
-    const tileHeight = sheet.tileHeight * spanRows;
+    
+    // 精确计算源图像的起始和结束位置，避免累积误差
+    const imgWidth = sheet.image.width;
+    const imgHeight = sheet.image.height;
+    const sx = (imgWidth / sheet.cols) * tile.col;
+    const sy = (imgHeight / sheet.rows) * tile.row;
+    const sw = (imgWidth / sheet.cols) * spanCols;
+    const sh = (imgHeight / sheet.rows) * spanRows;
     
     // 创建临时canvas，将瓦片图像转换为独立的base64数据
     const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = tileWidth;
-    tempCanvas.height = tileHeight;
-    const tempCtx = tempCanvas.getContext('2d');
+    tempCanvas.width = Math.round(sw);
+    tempCanvas.height = Math.round(sh);
+    const tempCtx = tempCanvas.getContext('2d', { alpha: true });
     
     if (tempCtx) {
-      // 绘制瓦片区域到临时canvas
+      // 关闭图像平滑，保持像素完美
+      tempCtx.imageSmoothingEnabled = false;
+      
+      // 绘制瓦片区域到临时canvas，使用精确的源坐标
       tempCtx.drawImage(
         sheet.image,
-        tile.col * sheet.tileWidth,
-        tile.row * sheet.tileHeight,
-        tileWidth,
-        tileHeight,
+        sx, sy, sw, sh,
         0, 0,
-        tileWidth,
-        tileHeight
+        tempCanvas.width, tempCanvas.height
       );
       
-      // 转换为base64，保存为独立数据
+      // 转换为base64，保存为独立数据（使用PNG格式，无损压缩）
       const imageData = tempCanvas.toDataURL('image/png');
       
       setTileMap(tiles => {
         const newTiles = new Map(tiles);
         const tileData: TileData = {
           imageData,
-          width: tileWidth,
-          height: tileHeight,
+          width: tempCanvas.width,
+          height: tempCanvas.height,
           spanRows: tile.spanRows,
           spanCols: tile.spanCols
         };
@@ -502,8 +560,9 @@ export function InfiniteCanvas() {
     const factor = e.deltaY > 0 ? 0.9 : 1.1;
     const newZoom = Math.max(0.2, Math.min(4.0, prevZoom * factor));
 
-    const w = canvasRef.width;
-    const h = canvasRef.height;
+    // 使用CSS像素尺寸，而不是物理像素
+    const w = rect.width;
+    const h = rect.height;
     const { cols, rows, cellWidth, cellHeight } = grid();
 
     const cellWPrev = cellWidth * prevZoom;
