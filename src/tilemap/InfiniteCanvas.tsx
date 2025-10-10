@@ -31,10 +31,10 @@ type SelectedTile = {
 } | null;
 
 type TileData = {
-  sheetId: string;
-  row: number;
-  col: number;
-  // 如果是合并瓦片，记录占用的行列数
+  // 保存实际的图像数据（独立于雪碧图）
+  imageData: string; // base64 URL
+  width: number;
+  height: number;
   spanRows?: number;
   spanCols?: number;
 };
@@ -91,6 +91,12 @@ export function InfiniteCanvas() {
   
   // 画笔模式
   const [brushMode, setBrushMode] = createSignal<BrushMode>('pixel');
+  
+  // 悬浮瓦片状态
+  const [hoveredTile, setHoveredTile] = createSignal<string | null>(null);
+  
+  // 网格线显示/隐藏
+  const [showGrid, setShowGrid] = createSignal(true);
 
   // 计算背景颜色
   const getBackgroundColor = () => {
@@ -136,9 +142,8 @@ export function InfiniteCanvas() {
 
     ctx.save();
 
-    // 绘制瓦片
+    // 绘制瓦片（从独立的图像数据渲染，不依赖雪碧图）
     const tiles = tileMap();
-    const sheets = spriteSheets();
     const mode = brushMode();
     
     // 设置图像渲染模式
@@ -149,51 +154,59 @@ export function InfiniteCanvas() {
       ctx.imageSmoothingQuality = 'high';
     }
     
+    // 创建图像缓存以提高性能
+    const imageCache = new Map<string, HTMLImageElement>();
+    
     tiles.forEach((tile, key) => {
       const [c, r] = key.split(',').map(Number);
       if (c >= 0 && c < cols && r >= 0 && r < rows) {
-        const sheet = sheets.find(s => s.id === tile.sheetId);
-        if (sheet && sheet.image.complete) {
-          const x = offsetX + c * cellW;
-          const y = offsetY + r * cellH;
-          
-          // 计算源图像区域（支持合并瓦片）
-          const spanRows = tile.spanRows || 1;
-          const spanCols = tile.spanCols || 1;
-          const sx = tile.col * sheet.tileWidth;
-          const sy = tile.row * sheet.tileHeight;
-          const sw = spanCols * sheet.tileWidth;
-          const sh = spanRows * sheet.tileHeight;
-          const dw = spanCols * cellW;
-          const dh = spanRows * cellH;
-          
-          ctx.drawImage(
-            sheet.image,
-            sx, sy, sw, sh,
-            x, y, dw, dh
-          );
+        const x = offsetX + c * cellW;
+        const y = offsetY + r * cellH;
+        
+        // 计算显示尺寸（支持合并瓦片）
+        const spanRows = tile.spanRows || 1;
+        const spanCols = tile.spanCols || 1;
+        const dw = spanCols * cellW;
+        const dh = spanRows * cellH;
+        
+        // 从缓存或创建新的图像
+        let img = imageCache.get(tile.imageData);
+        if (!img) {
+          img = new Image();
+          img.src = tile.imageData;
+          imageCache.set(tile.imageData, img);
+        }
+        
+        if (img.complete) {
+          ctx.drawImage(img, x, y, dw, dh);
+        } else {
+          img.onload = () => {
+            draw(); // 图像加载完成后重绘
+          };
         }
       }
     });
 
-    // 绘制网格线
-    ctx.lineWidth = lineWidth;
-    ctx.strokeStyle = lineColor;
+    // 绘制网格线（可切换显示/隐藏）
+    if (showGrid()) {
+      ctx.lineWidth = lineWidth;
+      ctx.strokeStyle = lineColor;
 
-    for (let c = 0; c <= cols; c++) {
-      const x = offsetX + c * cellW;
-      ctx.beginPath();
-      ctx.moveTo(x, offsetY);
-      ctx.lineTo(x, offsetY + rows * cellH);
-      ctx.stroke();
-    }
+      for (let c = 0; c <= cols; c++) {
+        const x = offsetX + c * cellW;
+        ctx.beginPath();
+        ctx.moveTo(x, offsetY);
+        ctx.lineTo(x, offsetY + rows * cellH);
+        ctx.stroke();
+      }
 
-    for (let r = 0; r <= rows; r++) {
-      const y = offsetY + r * cellH;
-      ctx.beginPath();
-      ctx.moveTo(offsetX, y);
-      ctx.lineTo(offsetX + cols * cellW, y);
-      ctx.stroke();
+      for (let r = 0; r <= rows; r++) {
+        const y = offsetY + r * cellH;
+        ctx.beginPath();
+        ctx.moveTo(offsetX, y);
+        ctx.lineTo(offsetX + cols * cellW, y);
+        ctx.stroke();
+      }
     }
 
     // 悬浮高亮
@@ -283,20 +296,16 @@ export function InfiniteCanvas() {
 
   const deleteSpriteSheet = (id: string) => {
     setSpriteSheets(sheets => sheets.filter(s => s.id !== id));
-    // 清除使用该雪碧图的瓦片
-    setTileMap(tiles => {
-      const newTiles = new Map(tiles);
-      Array.from(newTiles.entries()).forEach(([key, tile]) => {
-        if (tile.sheetId === id) {
-          newTiles.delete(key);
-        }
-      });
-      return newTiles;
-    });
-    // 清除选中的瓦片
+    
+    // 画布上的瓦片已经是独立的图像数据，不再清除它们
+    // 只清除选中的瓦片引用
     if (selectedTile()?.sheetId === id) {
       setSelectedTile(null);
     }
+    
+    // 清除该雪碧图相关的合并瓦片
+    setMergedTiles(mergedTiles().filter(m => m.sheetId !== id));
+    
     draw();
   };
 
@@ -372,24 +381,53 @@ export function InfiniteCanvas() {
     const { cols, rows } = grid();
     if (c < 0 || c >= cols || r < 0 || r >= rows) return;
     
-    setTileMap(tiles => {
-      const newTiles = new Map(tiles);
-      const tileData: TileData = {
-        sheetId: tile.sheetId,
-        row: tile.row,
-        col: tile.col
-      };
+    // 找到对应的雪碧图
+    const sheet = spriteSheets().find(s => s.id === tile.sheetId);
+    if (!sheet || !sheet.image.complete) return;
+    
+    // 计算瓦片尺寸
+    const spanRows = tile.spanRows || 1;
+    const spanCols = tile.spanCols || 1;
+    const tileWidth = sheet.tileWidth * spanCols;
+    const tileHeight = sheet.tileHeight * spanRows;
+    
+    // 创建临时canvas，将瓦片图像转换为独立的base64数据
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = tileWidth;
+    tempCanvas.height = tileHeight;
+    const tempCtx = tempCanvas.getContext('2d');
+    
+    if (tempCtx) {
+      // 绘制瓦片区域到临时canvas
+      tempCtx.drawImage(
+        sheet.image,
+        tile.col * sheet.tileWidth,
+        tile.row * sheet.tileHeight,
+        tileWidth,
+        tileHeight,
+        0, 0,
+        tileWidth,
+        tileHeight
+      );
       
-      // 如果是合并瓦片，添加跨度信息
-      if (tile.spanRows && tile.spanCols) {
-        tileData.spanRows = tile.spanRows;
-        tileData.spanCols = tile.spanCols;
-      }
+      // 转换为base64，保存为独立数据
+      const imageData = tempCanvas.toDataURL('image/png');
       
-      newTiles.set(`${c},${r}`, tileData);
-      return newTiles;
-    });
-    draw();
+      setTileMap(tiles => {
+        const newTiles = new Map(tiles);
+        const tileData: TileData = {
+          imageData,
+          width: tileWidth,
+          height: tileHeight,
+          spanRows: tile.spanRows,
+          spanCols: tile.spanCols
+        };
+        
+        newTiles.set(`${c},${r}`, tileData);
+        return newTiles;
+      });
+      draw();
+    }
   };
 
   const eraseTile = (c: number, r: number) => {
@@ -521,6 +559,11 @@ export function InfiniteCanvas() {
       if (e.code === 'KeyD' && !dKeyDown()) {
         e.preventDefault();
         setDKeyDown(true);
+      }
+      // L 键切换网格线显示/隐藏
+      if (e.code === 'KeyL') {
+        e.preventDefault();
+        setShowGrid(!showGrid());
       }
     };
     
@@ -663,54 +706,95 @@ export function InfiniteCanvas() {
           <Show when={mergedTiles().length > 0}>
             <div>
               <h3 style={{ 'margin-bottom': '12px', 'font-size': '16px', 'font-weight': '600' }}>合并瓦片库</h3>
-              <div style={{ display: 'flex', 'flex-direction': 'column', gap: '8px' }}>
+              <div style={{ display: 'flex', 'flex-direction': 'column', gap: '12px' }}>
                 <For each={mergedTiles()}>
-                  {(merged) => (
-                    <div 
-                      onClick={() => {
-                        // 使用合并瓦片作为画笔
-                        setSelectedTile({
-                          sheetId: merged.sheetId,
-                          row: merged.startRow,
-                          col: merged.startCol,
-                          spanRows: merged.spanRows,
-                          spanCols: merged.spanCols
-                        });
-                      }}
-                      style={{
-                        padding: '8px 12px',
-                        'background-color': 'rgba(50,50,66,0.5)',
-                        'border-radius': '6px',
-                        border: '1px solid rgba(255,255,255,0.1)',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s',
-                        display: 'flex',
-                        'justify-content': 'space-between',
-                        'align-items': 'center'
-                      }}
-                      onMouseOver={(e) => e.currentTarget.style.backgroundColor = 'rgba(70,70,86,0.5)'}
-                      onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'rgba(50,50,66,0.5)'}
-                    >
-                      <span style={{ 'font-size': '14px' }}>{merged.name}</span>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setMergedTiles(mergedTiles().filter(m => m.id !== merged.id));
+                  {(merged) => {
+                    const sheet = spriteSheets().find(s => s.id === merged.sheetId);
+                    const isMergedBrushSelected = selectedTile()?.sheetId === merged.sheetId &&
+                      selectedTile()?.row === merged.startRow &&
+                      selectedTile()?.col === merged.startCol &&
+                      selectedTile()?.spanRows === merged.spanRows &&
+                      selectedTile()?.spanCols === merged.spanCols;
+                    
+                    return (
+                      <div 
+                        onClick={() => {
+                          setSelectedTile({
+                            sheetId: merged.sheetId,
+                            row: merged.startRow,
+                            col: merged.startCol,
+                            spanRows: merged.spanRows,
+                            spanCols: merged.spanCols
+                          });
                         }}
                         style={{
-                          padding: '4px 8px',
-                          'background-color': 'rgba(220,50,50,0.8)',
-                          color: 'white',
-                          border: 'none',
-                          'border-radius': '4px',
+                          padding: '8px',
+                          'background-color': isMergedBrushSelected ? 'rgba(72,187,120,0.2)' : 'rgba(50,50,66,0.5)',
+                          border: isMergedBrushSelected ? '2px solid rgba(72,187,120,1)' : '1px solid rgba(255,255,255,0.1)',
                           cursor: 'pointer',
-                          'font-size': '12px'
+                          transition: 'all 0.2s'
+                        }}
+                        onMouseOver={(e) => {
+                          if (!isMergedBrushSelected) {
+                            e.currentTarget.style.backgroundColor = 'rgba(70,70,86,0.5)';
+                          }
+                        }}
+                        onMouseOut={(e) => {
+                          if (!isMergedBrushSelected) {
+                            e.currentTarget.style.backgroundColor = 'rgba(50,50,66,0.5)';
+                          }
                         }}
                       >
-                        删除
-                      </button>
-                    </div>
-                  )}
+                        <div style={{ display: 'flex', 'justify-content': 'space-between', 'align-items': 'flex-start', 'margin-bottom': '8px' }}>
+                          <span style={{ 'font-size': '14px', 'font-weight': '600' }}>{merged.name}</span>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setMergedTiles(mergedTiles().filter(m => m.id !== merged.id));
+                            }}
+                            style={{
+                              padding: '4px 8px',
+                              'background-color': 'rgba(220,50,50,0.8)',
+                              color: 'white',
+                              border: 'none',
+                              'border-radius': '4px',
+                              cursor: 'pointer',
+                              'font-size': '12px'
+                            }}
+                          >
+                            删除
+                          </button>
+                        </div>
+                        
+                        {/* 合并瓦片预览（作为一个整体显示，无内部网格线） */}
+                        <Show when={sheet && sheet.image.complete}>
+                          <div style={{
+                            position: 'relative',
+                            width: `${sheet!.tileWidth * merged.spanCols}px`,
+                            height: `${sheet!.tileHeight * merged.spanRows}px`,
+                            overflow: 'hidden',
+                            // 作为整体，只有外边框网格线
+                            'box-shadow': 'inset 0 0 0 1px rgba(255,255,255,0.2)'
+                          }}>
+                            <img 
+                              src={sheet!.url}
+                              alt={`merged-${merged.id}`}
+                              style={{
+                                position: 'absolute',
+                                width: `${sheet!.image.width}px`,
+                                height: `${sheet!.image.height}px`,
+                                left: `${-merged.startCol * sheet!.tileWidth}px`,
+                                top: `${-merged.startRow * sheet!.tileHeight}px`,
+                                'object-fit': 'none',
+                                'image-rendering': 'pixelated',
+                                display: 'block'
+                              }}
+                            />
+                          </div>
+                        </Show>
+                      </div>
+                    );
+                  }}
                 </For>
               </div>
             </div>
@@ -841,25 +925,25 @@ export function InfiniteCanvas() {
                     {/* 瓦片预览和选择 */}
                     <div style={{ 
                       'max-height': '200px', 
-                      'overflow': 'auto', 
-                      'border-radius': '4px',
-                      border: '1px solid rgba(255,255,255,0.1)'
+                      'overflow': 'auto'
                     }}>
                       <div style={{ 
                         display: 'grid', 
-                        'grid-template-columns': `repeat(${sheet.cols}, 1fr)`,
-                        gap: '2px',
-                        padding: '4px',
-                        'background-color': 'rgba(0,0,0,0.3)'
+                        'grid-template-columns': `repeat(${sheet.cols}, ${sheet.tileWidth}px)`,
+                        'grid-auto-rows': `${sheet.tileHeight}px`,
+                        gap: '0'
                       }}>
                         <For each={Array.from({ length: sheet.rows * sheet.cols })}>
                           {(_, idx) => {
                             const row = Math.floor(idx() / sheet.cols);
                             const col = idx() % sheet.cols;
-                            const isBrushSelected = selectedTile()?.sheetId === sheet.id && 
+                            const tileKey = `${sheet.id}::${row}::${col}`;
+                            const isBrushSelected = () => selectedTile()?.sheetId === sheet.id && 
                                              selectedTile()?.row === row && 
                                              selectedTile()?.col === col;
-                            const isMultiSelected = selectedTiles().has(`${sheet.id}::${row}::${col}`);
+                            const isMultiSelected = () => selectedTiles().has(tileKey);
+                            const isHovered = () => hoveredTile() === tileKey && !isBrushSelected() && !isMultiSelected();
+                            
                             return (
                               <div 
                                 onClick={(e) => {
@@ -871,119 +955,99 @@ export function InfiniteCanvas() {
                                     setSelectedTile({ sheetId: sheet.id, row, col });
                                   }
                                 }}
+                                onMouseEnter={() => setHoveredTile(tileKey)}
+                                onMouseLeave={() => setHoveredTile(null)}
                                 style={{ 
                                   position: 'relative',
-                                  'aspect-ratio': '1',
+                                  width: `${sheet.tileWidth}px`,
+                                  height: `${sheet.tileHeight}px`,
                                   cursor: 'pointer',
-                                  border: isBrushSelected 
-                                    ? '2px solid rgba(72,187,120,1)' 
-                                    : isMultiSelected 
-                                      ? '2px solid rgba(255,215,0,0.8)'
-                                      : '1px solid rgba(255,255,255,0.1)',
-                                  'border-radius': '2px',
-                                  'background-color': 'rgba(0,0,0,0.2)',
                                   overflow: 'hidden',
-                                  transition: 'all 0.1s',
-                                  'box-shadow': isBrushSelected 
-                                    ? '0 0 8px rgba(72,187,120,0.6)' 
-                                    : isMultiSelected 
-                                      ? '0 0 8px rgba(255,215,0,0.5)' 
-                                      : 'none'
-                                }}
-                                onMouseOver={(e) => {
-                                  if (!isBrushSelected && !isMultiSelected) {
-                                    e.currentTarget.style.borderColor = 'rgba(255,255,255,0.3)';
-                                  }
-                                }}
-                                onMouseOut={(e) => {
-                                  if (!isBrushSelected && !isMultiSelected) {
-                                    e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)';
-                                  }
+                                  // 使用box-shadow模拟网格线（不占空间）
+                                  // 多选瓦片无网格线，看起来像一个整体
+                                  'box-shadow': isMultiSelected() 
+                                    ? 'none' 
+                                    : 'inset 0 0 0 1px rgba(255,255,255,0.1)'
                                 }}
                               >
-                                <canvas 
-                                  ref={(canvas) => {
-                                    if (canvas && sheet.image.complete) {
-                                      const ctx = canvas.getContext('2d');
-                                      if (ctx) {
-                                        canvas.width = sheet.tileWidth;
-                                        canvas.height = sheet.tileHeight;
-                                        
-                                        // 先填充背景色（棋盘格效果）
-                                        const tileSize = 4;
-                                        for (let y = 0; y < sheet.tileHeight; y += tileSize) {
-                                          for (let x = 0; x < sheet.tileWidth; x += tileSize) {
-                                            const isEven = (Math.floor(x / tileSize) + Math.floor(y / tileSize)) % 2 === 0;
-                                            ctx.fillStyle = isEven ? '#2a2a2a' : '#3a3a3a';
-                                            ctx.fillRect(x, y, tileSize, tileSize);
-                                          }
-                                        }
-                                        
-                                        // 绘制瓦片
-                                        ctx.drawImage(
-                                          sheet.image,
-                                          col * sheet.tileWidth,
-                                          row * sheet.tileHeight,
-                                          sheet.tileWidth,
-                                          sheet.tileHeight,
-                                          0, 0,
-                                          sheet.tileWidth,
-                                          sheet.tileHeight
-                                        );
-                                      }
-                                    }
-                                  }}
+                                {/* 使用img精确裁剪瓦片 */}
+                                <img 
+                                  src={sheet.url}
+                                  alt={`tile-${row}-${col}`}
                                   style={{ 
-                                    width: '100%', 
-                                    height: '100%', 
+                                    position: 'absolute',
+                                    width: `${sheet.image.width}px`,
+                                    height: `${sheet.image.height}px`,
+                                    left: `${-col * sheet.tileWidth}px`,
+                                    top: `${-row * sheet.tileHeight}px`,
+                                    'object-fit': 'none',
                                     'image-rendering': 'pixelated',
-                                    display: 'block',
-                                    position: 'relative',
-                                    'z-index': 1
+                                    display: 'block'
                                   }}
                                 />
-                                {/* 画笔选中遮罩 */}
-                                <Show when={isBrushSelected}>
+                                
+                                {/* 悬浮效果 */}
+                                <Show when={isHovered()}>
                                   <div style={{
                                     position: 'absolute',
                                     top: 0,
                                     left: 0,
                                     right: 0,
                                     bottom: 0,
-                                    'background-color': 'rgba(72,187,120,0.35)',
-                                    'pointer-events': 'none',
-                                    'z-index': 10
+                                    'background-color': 'rgba(72,187,120,0.1)',
+                                    'box-shadow': 'inset 0 0 0 2px rgba(72,187,120,0.6)',
+                                    'pointer-events': 'none'
                                   }}></div>
                                 </Show>
-                                {/* 多选遮罩和标记 */}
-                                <Show when={isMultiSelected}>
+                                
+                                {/* 画笔选中效果 */}
+                                <Show when={isBrushSelected()}>
                                   <div style={{
                                     position: 'absolute',
                                     top: 0,
                                     left: 0,
                                     right: 0,
                                     bottom: 0,
-                                    'background-color': 'rgba(255,215,0,0.3)',
-                                    'pointer-events': 'none',
-                                    'z-index': 10
+                                    'background-color': 'rgba(72,187,120,0.15)',
+                                    'box-shadow': 'inset 0 0 0 2px rgba(72,187,120,1)',
+                                    'pointer-events': 'none'
+                                  }}></div>
+                                </Show>
+                                
+                                {/* 多选遮罩和标记 */}
+                                <Show when={isMultiSelected()}>
+                                  <div style={{
+                                    position: 'absolute',
+                                    top: 0,
+                                    left: 0,
+                                    right: 0,
+                                    bottom: 0,
+                                    'background-color': 'rgba(255,215,0,0.15)',
+                                    'pointer-events': 'none'
+                                  }}></div>
+                                  <div style={{
+                                    position: 'absolute',
+                                    top: 0,
+                                    left: 0,
+                                    right: 0,
+                                    bottom: 0,
+                                    'box-shadow': 'inset 0 0 0 2px rgba(255,215,0,0.8)',
+                                    'pointer-events': 'none'
                                   }}></div>
                                   <div style={{
                                     position: 'absolute',
                                     top: '2px',
                                     right: '2px',
-                                    width: '16px',
-                                    height: '16px',
+                                    width: '12px',
+                                    height: '12px',
                                     'background-color': 'rgba(255,215,0,0.95)',
-                                    'border-radius': '50%',
                                     display: 'flex',
                                     'align-items': 'center',
                                     'justify-content': 'center',
-                                    'font-size': '10px',
+                                    'font-size': '8px',
                                     'font-weight': 'bold',
                                     color: 'black',
-                                    'pointer-events': 'none',
-                                    'z-index': 11,
-                                    'box-shadow': '0 1px 3px rgba(0,0,0,0.3)'
+                                    'pointer-events': 'none'
                                   }}>
                                     ✓
                                   </div>
@@ -1082,6 +1146,9 @@ export function InfiniteCanvas() {
                   🗑️ 橡皮擦模式
                 </div>
               )}
+              <div style={{ color: showGrid() ? 'rgba(102,126,234,1)' : 'rgba(150,150,150,1)', 'font-size': '13px' }}>
+                网格线: {showGrid() ? '显示 ✓' : '隐藏'}
+              </div>
             </div>
             <button
               onClick={resetView}
@@ -1116,6 +1183,7 @@ export function InfiniteCanvas() {
               <div>• Cmd/Ctrl + G: 合并选中瓦片</div>
               <div>• 左键拖拽画布: 绘制瓦片</div>
               <div>• 按住 D 键: 橡皮擦模式（删除瓦片）</div>
+              <div>• 按 L 键: 切换网格线显示/隐藏</div>
             </div>
           </div>
         </div>
