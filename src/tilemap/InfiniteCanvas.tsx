@@ -26,6 +26,8 @@ type SelectedTile = {
   sheetId: string;
   row: number;
   col: number;
+  spanRows?: number;
+  spanCols?: number;
 } | null;
 
 type TileData = {
@@ -76,6 +78,10 @@ export function InfiniteCanvas() {
   const [selectedTile, setSelectedTile] = createSignal<SelectedTile>(null);
   const [tileMap, setTileMap] = createSignal<Map<string, TileData>>(new Map());
   const [isDrawing, setIsDrawing] = createSignal(false);
+  
+  // 橡皮擦模式
+  const [dKeyDown, setDKeyDown] = createSignal(false);
+  const [isErasing, setIsErasing] = createSignal(false);
   
   // 多选和合并瓦片
   const [selectedTiles, setSelectedTiles] = createSignal<Set<string>>(new Set());
@@ -196,8 +202,16 @@ export function InfiniteCanvas() {
       if (c >= 0 && c < cols && r >= 0 && r < rows) {
         const x = offsetX + c * cellW;
         const y = offsetY + r * cellH;
-        ctx.fillStyle = 'rgba(102,126,234,0.25)';
-        ctx.strokeStyle = 'rgba(102,126,234,0.9)';
+        
+        // 橡皮擦模式显示红色
+        if (dKeyDown()) {
+          ctx.fillStyle = 'rgba(220,50,50,0.3)';
+          ctx.strokeStyle = 'rgba(220,50,50,0.9)';
+        } else {
+          ctx.fillStyle = 'rgba(102,126,234,0.25)';
+          ctx.strokeStyle = 'rgba(102,126,234,0.9)';
+        }
+        
         ctx.lineWidth = Math.max(1, lineWidth);
         ctx.fillRect(x, y, cellW, cellH);
         ctx.strokeRect(x, y, cellW, cellH);
@@ -287,7 +301,7 @@ export function InfiniteCanvas() {
   };
 
   const toggleTileSelection = (sheetId: string, row: number, col: number) => {
-    const key = `${sheetId}-${row}-${col}`;
+    const key = `${sheetId}::${row}::${col}`;
     setSelectedTiles(prev => {
       const newSet = new Set(prev);
       if (newSet.has(key)) {
@@ -308,8 +322,11 @@ export function InfiniteCanvas() {
 
     // 解析选中的瓦片
     const tiles = Array.from(selected).map(key => {
-      const [sheetId, row, col] = key.split('-');
-      return { sheetId, row: parseInt(row), col: parseInt(col) };
+      const parts = key.split('::');
+      const row = parseInt(parts[parts.length - 2]);
+      const col = parseInt(parts[parts.length - 1]);
+      const sheetId = parts.slice(0, -2).join('::');
+      return { sheetId, row, col };
     });
 
     // 检查是否来自同一个雪碧图
@@ -357,29 +374,31 @@ export function InfiniteCanvas() {
     
     setTileMap(tiles => {
       const newTiles = new Map(tiles);
-      newTiles.set(`${c},${r}`, {
+      const tileData: TileData = {
         sheetId: tile.sheetId,
         row: tile.row,
         col: tile.col
-      });
+      };
+      
+      // 如果是合并瓦片，添加跨度信息
+      if (tile.spanRows && tile.spanCols) {
+        tileData.spanRows = tile.spanRows;
+        tileData.spanCols = tile.spanCols;
+      }
+      
+      newTiles.set(`${c},${r}`, tileData);
       return newTiles;
     });
     draw();
   };
 
-  const placeMergedTile = (c: number, r: number, merged: MergedTile) => {
+  const eraseTile = (c: number, r: number) => {
     const { cols, rows } = grid();
     if (c < 0 || c >= cols || r < 0 || r >= rows) return;
     
     setTileMap(tiles => {
       const newTiles = new Map(tiles);
-      newTiles.set(`${c},${r}`, {
-        sheetId: merged.sheetId,
-        row: merged.startRow,
-        col: merged.startCol,
-        spanRows: merged.spanRows,
-        spanCols: merged.spanCols
-      });
+      newTiles.delete(`${c},${r}`);
       return newTiles;
     });
     draw();
@@ -401,6 +420,12 @@ export function InfiniteCanvas() {
     
     const cell = toCell(e.clientX, e.clientY);
     setHoverCell(cell);
+    
+    // 橡皮擦模式：按住 D 键时删除瓦片
+    if (dKeyDown() && cell) {
+      eraseTile(cell.c, cell.r);
+      return;
+    }
     
     // 绘制瓦片
     if (isDrawing() && cell) {
@@ -492,12 +517,22 @@ export function InfiniteCanvas() {
         e.preventDefault();
         mergeTiles();
       }
+      // D 键橡皮擦模式
+      if (e.code === 'KeyD' && !dKeyDown()) {
+        e.preventDefault();
+        setDKeyDown(true);
+      }
     };
     
     const onKeyUp = (e: KeyboardEvent) => {
       if (e.code === 'Space') {
         e.preventDefault();
         setSpaceDown(false);
+      }
+      // D 键释放
+      if (e.code === 'KeyD') {
+        e.preventDefault();
+        setDKeyDown(false);
       }
     };
     
@@ -592,8 +627,8 @@ export function InfiniteCanvas() {
                   flex: 1,
                   padding: '10px',
                   'border-radius': '6px',
-                  border: brushMode() === 'pixel' ? '2px solid rgba(102,226,234,1)' : '1px solid rgba(255,255,255,0.2)',
-                  'background-color': brushMode() === 'pixel' ? 'rgba(102,226,234,0.2)' : 'rgba(50,50,66,0.5)',
+                  border: brushMode() === 'pixel' ? '2px solid rgba(72,187,120,1)' : '1px solid rgba(255,255,255,0.2)',
+                  'background-color': brushMode() === 'pixel' ? 'rgba(72,187,120,0.2)' : 'rgba(50,50,66,0.5)',
                   color: 'white',
                   cursor: 'pointer',
                   'font-weight': '600',
@@ -608,8 +643,8 @@ export function InfiniteCanvas() {
                   flex: 1,
                   padding: '10px',
                   'border-radius': '6px',
-                  border: brushMode() === 'interpolated' ? '2px solid rgba(102,226,234,1)' : '1px solid rgba(255,255,255,0.2)',
-                  'background-color': brushMode() === 'interpolated' ? 'rgba(102,226,234,0.2)' : 'rgba(50,50,66,0.5)',
+                  border: brushMode() === 'interpolated' ? '2px solid rgba(72,187,120,1)' : '1px solid rgba(255,255,255,0.2)',
+                  'background-color': brushMode() === 'interpolated' ? 'rgba(72,187,120,0.2)' : 'rgba(50,50,66,0.5)',
                   color: 'white',
                   cursor: 'pointer',
                   'font-weight': '600',
@@ -637,7 +672,9 @@ export function InfiniteCanvas() {
                         setSelectedTile({
                           sheetId: merged.sheetId,
                           row: merged.startRow,
-                          col: merged.startCol
+                          col: merged.startCol,
+                          spanRows: merged.spanRows,
+                          spanCols: merged.spanCols
                         });
                       }}
                       style={{
@@ -708,9 +745,9 @@ export function InfiniteCanvas() {
             <Show when={selectedTiles().size > 0}>
               <div style={{
                 padding: '8px 12px',
-                'background-color': 'rgba(102,226,234,0.2)',
+                'background-color': 'rgba(72,187,120,0.2)',
                 'border-radius': '6px',
-                border: '1px solid rgba(102,226,234,0.5)',
+                border: '1px solid rgba(72,187,120,0.5)',
                 'margin-bottom': '12px'
               }}>
                 <div style={{ 'font-size': '14px', 'margin-bottom': '4px' }}>
@@ -722,7 +759,7 @@ export function InfiniteCanvas() {
                     style={{
                       flex: 1,
                       padding: '6px 12px',
-                      'background-color': 'rgba(102,226,234,0.8)',
+                      'background-color': 'rgba(72,187,120,0.8)',
                       color: 'white',
                       border: 'none',
                       'border-radius': '4px',
@@ -822,7 +859,7 @@ export function InfiniteCanvas() {
                             const isBrushSelected = selectedTile()?.sheetId === sheet.id && 
                                              selectedTile()?.row === row && 
                                              selectedTile()?.col === col;
-                            const isMultiSelected = selectedTiles().has(`${sheet.id}-${row}-${col}`);
+                            const isMultiSelected = selectedTiles().has(`${sheet.id}::${row}::${col}`);
                             return (
                               <div 
                                 onClick={(e) => {
@@ -839,15 +876,19 @@ export function InfiniteCanvas() {
                                   'aspect-ratio': '1',
                                   cursor: 'pointer',
                                   border: isBrushSelected 
-                                    ? '2px solid rgba(102,226,234,1)' 
+                                    ? '2px solid rgba(72,187,120,1)' 
                                     : isMultiSelected 
                                       ? '2px solid rgba(255,215,0,0.8)'
                                       : '1px solid rgba(255,255,255,0.1)',
                                   'border-radius': '2px',
-                                  'background-color': isMultiSelected ? 'rgba(255,215,0,0.2)' : 'rgba(0,0,0,0.2)',
+                                  'background-color': 'rgba(0,0,0,0.2)',
                                   overflow: 'hidden',
                                   transition: 'all 0.1s',
-                                  'box-shadow': isMultiSelected ? '0 0 8px rgba(255,215,0,0.5)' : 'none'
+                                  'box-shadow': isBrushSelected 
+                                    ? '0 0 8px rgba(72,187,120,0.6)' 
+                                    : isMultiSelected 
+                                      ? '0 0 8px rgba(255,215,0,0.5)' 
+                                      : 'none'
                                 }}
                                 onMouseOver={(e) => {
                                   if (!isBrushSelected && !isMultiSelected) {
@@ -867,6 +908,18 @@ export function InfiniteCanvas() {
                                       if (ctx) {
                                         canvas.width = sheet.tileWidth;
                                         canvas.height = sheet.tileHeight;
+                                        
+                                        // 先填充背景色（棋盘格效果）
+                                        const tileSize = 4;
+                                        for (let y = 0; y < sheet.tileHeight; y += tileSize) {
+                                          for (let x = 0; x < sheet.tileWidth; x += tileSize) {
+                                            const isEven = (Math.floor(x / tileSize) + Math.floor(y / tileSize)) % 2 === 0;
+                                            ctx.fillStyle = isEven ? '#2a2a2a' : '#3a3a3a';
+                                            ctx.fillRect(x, y, tileSize, tileSize);
+                                          }
+                                        }
+                                        
+                                        // 绘制瓦片
                                         ctx.drawImage(
                                           sheet.image,
                                           col * sheet.tileWidth,
@@ -880,24 +933,57 @@ export function InfiniteCanvas() {
                                       }
                                     }
                                   }}
-                                  style={{ width: '100%', height: '100%', 'image-rendering': 'pixelated' }}
+                                  style={{ 
+                                    width: '100%', 
+                                    height: '100%', 
+                                    'image-rendering': 'pixelated',
+                                    display: 'block',
+                                    position: 'relative',
+                                    'z-index': 1
+                                  }}
                                 />
-                                {/* 多选标记 */}
+                                {/* 画笔选中遮罩 */}
+                                <Show when={isBrushSelected}>
+                                  <div style={{
+                                    position: 'absolute',
+                                    top: 0,
+                                    left: 0,
+                                    right: 0,
+                                    bottom: 0,
+                                    'background-color': 'rgba(72,187,120,0.35)',
+                                    'pointer-events': 'none',
+                                    'z-index': 10
+                                  }}></div>
+                                </Show>
+                                {/* 多选遮罩和标记 */}
                                 <Show when={isMultiSelected}>
+                                  <div style={{
+                                    position: 'absolute',
+                                    top: 0,
+                                    left: 0,
+                                    right: 0,
+                                    bottom: 0,
+                                    'background-color': 'rgba(255,215,0,0.3)',
+                                    'pointer-events': 'none',
+                                    'z-index': 10
+                                  }}></div>
                                   <div style={{
                                     position: 'absolute',
                                     top: '2px',
                                     right: '2px',
                                     width: '16px',
                                     height: '16px',
-                                    'background-color': 'rgba(255,215,0,0.9)',
+                                    'background-color': 'rgba(255,215,0,0.95)',
                                     'border-radius': '50%',
                                     display: 'flex',
                                     'align-items': 'center',
                                     'justify-content': 'center',
                                     'font-size': '10px',
                                     'font-weight': 'bold',
-                                    color: 'black'
+                                    color: 'black',
+                                    'pointer-events': 'none',
+                                    'z-index': 11,
+                                    'box-shadow': '0 1px 3px rgba(0,0,0,0.3)'
                                   }}>
                                     ✓
                                   </div>
@@ -983,8 +1069,18 @@ export function InfiniteCanvas() {
               {hoverCell() && (
                 <div>悬浮: 列{hoverCell()!.c} 行{hoverCell()!.r}</div>
               )}
-              {selectedTile() && (
-                <div style={{ color: 'rgba(102,226,234,1)' }}>已选瓦片: 行{selectedTile()!.row} 列{selectedTile()!.col}</div>
+              {selectedTile() && !dKeyDown() && (
+                <div style={{ color: 'rgba(72,187,120,1)' }}>
+                  已选瓦片: 行{selectedTile()!.row} 列{selectedTile()!.col}
+                  {selectedTile()!.spanRows && selectedTile()!.spanCols && (
+                    <span> ({selectedTile()!.spanRows}×{selectedTile()!.spanCols})</span>
+                  )}
+                </div>
+              )}
+              {dKeyDown() && (
+                <div style={{ color: 'rgba(220,50,50,1)', 'font-weight': '600' }}>
+                  🗑️ 橡皮擦模式
+                </div>
               )}
             </div>
             <button
@@ -1019,6 +1115,7 @@ export function InfiniteCanvas() {
               <div>• Shift + 左键点击: 多选瓦片</div>
               <div>• Cmd/Ctrl + G: 合并选中瓦片</div>
               <div>• 左键拖拽画布: 绘制瓦片</div>
+              <div>• 按住 D 键: 橡皮擦模式（删除瓦片）</div>
             </div>
           </div>
         </div>
