@@ -2,7 +2,7 @@
 
 ## 📋 文档概述
 
-本文档详细讲解如何在 Web 端实现一个功能完整、性能优异的 2D TileMap 编辑器，达到 Godot 引擎的水平。方案采用现代 Web 技术栈：**AssemblyScript + WebAssembly + WebGPU + TypeScript**。
+本文档详细讲解如何在 Web 端实现一个功能完整、性能优异的 2D TileMap 编辑器，达到 Godot 引擎的水平。方案采用现代 Web 技术栈：**WebAssembly + WebGPU + TypeScript**。
 
 ---
 
@@ -67,9 +67,9 @@
 |------|------|----------|------|
 | **UI 层** | 用户界面、交互响应 | SolidJS | 处理工具栏、图层面板、资源浏览器等 UI 组件 |
 | **渲染层** | 图形显示、视口管理 | WebGPU | 将 TileMap 数据转换为屏幕像素 |
-| **逻辑层** | 核心编辑逻辑、数据管理 | AssemblyScript | 使用 ECS 管理世界数据、处理编辑命令 |
-| **资源层** | 资源加载、图集管理 | TS | 加载图片、解析 TileSet、管理纹理图集 |
-| **存档层** | 数据持久化 | JSON + Binary | 实现序列化/反序列化、Undo/Redo 栈 |
+| **逻辑层** | 核心编辑逻辑、数据管理 | WASM | 使用 ECS 管理世界数据、处理编辑命令 |
+| **资源层** | 资源加载、图集管理 | TypeScript | 加载图片、解析 TileSet、管理纹理图集 |
+| **存档层** | 数据持久化 | JSON | 实现序列化/反序列化、Undo/Redo 栈 |
 
 ### 数据流动路径
 
